@@ -9,38 +9,152 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AppRouteImport } from './routes/app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppPerfilPessoalRouteImport } from './routes/app.perfil-pessoal'
+import { Route as AppPerfilEmpresaRouteImport } from './routes/app.perfil-empresa'
+import { Route as AppDocumentosRouteImport } from './routes/app.documentos'
+import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
+import { Route as AppCampanhasRouteImport } from './routes/app.campanhas'
 
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPerfilPessoalRoute = AppPerfilPessoalRouteImport.update({
+  id: '/perfil-pessoal',
+  path: '/perfil-pessoal',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPerfilEmpresaRoute = AppPerfilEmpresaRouteImport.update({
+  id: '/perfil-empresa',
+  path: '/perfil-empresa',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDocumentosRoute = AppDocumentosRouteImport.update({
+  id: '/documentos',
+  path: '/documentos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDashboardRoute = AppDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCampanhasRoute = AppCampanhasRouteImport.update({
+  id: '/campanhas',
+  path: '/campanhas',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/app/campanhas': typeof AppCampanhasRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
+  '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
+  '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/app/campanhas': typeof AppCampanhasRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
+  '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
+  '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
+  '/app': typeof AppIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/app/campanhas': typeof AppCampanhasRoute
+  '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
+  '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
+  '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
+  '/app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/campanhas'
+    | '/app/dashboard'
+    | '/app/documentos'
+    | '/app/perfil-empresa'
+    | '/app/perfil-pessoal'
+    | '/app/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/app/campanhas'
+    | '/app/dashboard'
+    | '/app/documentos'
+    | '/app/perfil-empresa'
+    | '/app/perfil-pessoal'
+    | '/app'
+  id:
+    | '__root__'
+    | '/'
+    | '/app'
+    | '/auth'
+    | '/app/campanhas'
+    | '/app/dashboard'
+    | '/app/documentos'
+    | '/app/perfil-empresa'
+    | '/app/perfil-pessoal'
+    | '/app/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +162,76 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/perfil-pessoal': {
+      id: '/app/perfil-pessoal'
+      path: '/perfil-pessoal'
+      fullPath: '/app/perfil-pessoal'
+      preLoaderRoute: typeof AppPerfilPessoalRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/perfil-empresa': {
+      id: '/app/perfil-empresa'
+      path: '/perfil-empresa'
+      fullPath: '/app/perfil-empresa'
+      preLoaderRoute: typeof AppPerfilEmpresaRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/documentos': {
+      id: '/app/documentos'
+      path: '/documentos'
+      fullPath: '/app/documentos'
+      preLoaderRoute: typeof AppDocumentosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/dashboard': {
+      id: '/app/dashboard'
+      path: '/dashboard'
+      fullPath: '/app/dashboard'
+      preLoaderRoute: typeof AppDashboardRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/campanhas': {
+      id: '/app/campanhas'
+      path: '/campanhas'
+      fullPath: '/app/campanhas'
+      preLoaderRoute: typeof AppCampanhasRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppCampanhasRoute: typeof AppCampanhasRoute
+  AppDashboardRoute: typeof AppDashboardRoute
+  AppDocumentosRoute: typeof AppDocumentosRoute
+  AppPerfilEmpresaRoute: typeof AppPerfilEmpresaRoute
+  AppPerfilPessoalRoute: typeof AppPerfilPessoalRoute
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppCampanhasRoute: AppCampanhasRoute,
+  AppDashboardRoute: AppDashboardRoute,
+  AppDocumentosRoute: AppDocumentosRoute,
+  AppPerfilEmpresaRoute: AppPerfilEmpresaRoute,
+  AppPerfilPessoalRoute: AppPerfilPessoalRoute,
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
