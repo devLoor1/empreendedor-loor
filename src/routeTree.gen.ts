@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppPerfilPessoalRouteImport } from './routes/app.perfil-pessoal'
 import { Route as AppPerfilEmpresaRouteImport } from './routes/app.perfil-empresa'
+import { Route as AppDocumentosRouteImport } from './routes/app.documentos'
 import { Route as AppDashboardRouteImport } from './routes/app.dashboard'
 
 const AuthRoute = AuthRouteImport.update({
@@ -47,6 +48,11 @@ const AppPerfilEmpresaRoute = AppPerfilEmpresaRouteImport.update({
   path: '/perfil-empresa',
   getParentRoute: () => AppRoute,
 } as any)
+const AppDocumentosRoute = AppDocumentosRouteImport.update({
+  id: '/documentos',
+  path: '/documentos',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
   '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
   '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
   '/app/': typeof AppIndexRoute
@@ -66,6 +73,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
   '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
   '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
   '/app': typeof AppIndexRoute
@@ -76,6 +84,7 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
   '/app/dashboard': typeof AppDashboardRoute
+  '/app/documentos': typeof AppDocumentosRoute
   '/app/perfil-empresa': typeof AppPerfilEmpresaRoute
   '/app/perfil-pessoal': typeof AppPerfilPessoalRoute
   '/app/': typeof AppIndexRoute
@@ -87,6 +96,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/app/dashboard'
+    | '/app/documentos'
     | '/app/perfil-empresa'
     | '/app/perfil-pessoal'
     | '/app/'
@@ -95,6 +105,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/app/dashboard'
+    | '/app/documentos'
     | '/app/perfil-empresa'
     | '/app/perfil-pessoal'
     | '/app'
@@ -104,6 +115,7 @@ export interface FileRouteTypes {
     | '/app'
     | '/auth'
     | '/app/dashboard'
+    | '/app/documentos'
     | '/app/perfil-empresa'
     | '/app/perfil-pessoal'
     | '/app/'
@@ -159,6 +171,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppPerfilEmpresaRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/documentos': {
+      id: '/app/documentos'
+      path: '/documentos'
+      fullPath: '/app/documentos'
+      preLoaderRoute: typeof AppDocumentosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/dashboard': {
       id: '/app/dashboard'
       path: '/dashboard'
@@ -171,6 +190,7 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
+  AppDocumentosRoute: typeof AppDocumentosRoute
   AppPerfilEmpresaRoute: typeof AppPerfilEmpresaRoute
   AppPerfilPessoalRoute: typeof AppPerfilPessoalRoute
   AppIndexRoute: typeof AppIndexRoute
@@ -178,6 +198,7 @@ interface AppRouteChildren {
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
+  AppDocumentosRoute: AppDocumentosRoute,
   AppPerfilEmpresaRoute: AppPerfilEmpresaRoute,
   AppPerfilPessoalRoute: AppPerfilPessoalRoute,
   AppIndexRoute: AppIndexRoute,
