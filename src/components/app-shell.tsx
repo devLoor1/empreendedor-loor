@@ -1,8 +1,9 @@
-import { Link, useRouterState, useNavigate, Outlet } from "@tanstack/react-router";
-import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut, Rocket } from "lucide-react";
+import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
+import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut } from "lucide-react";
 import { mockStore, useMock } from "@/lib/mock-store";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { appLogoUrl, appLogoAlt } from "@/config/brand";
 
 const nav = [
   { to: "/app/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -14,22 +15,19 @@ const nav = [
 
 export function AppShell() {
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { pathname } = useLocation();
   const user = useMock(() => mockStore.getUser());
 
   const handleSignOut = () => {
     mockStore.signOut();
-    navigate({ to: "/auth" });
+    navigate("/auth");
   };
 
   return (
     <div className="min-h-screen flex bg-background">
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card">
         <div className="h-16 flex items-center gap-2 px-6 border-b border-border">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-primary-foreground" style={{ background: "var(--gradient-primary)" }}>
-            <Rocket className="w-4 h-4" />
-          </div>
-          <span className="font-semibold text-foreground">Loor</span>
+          <img src={appLogoUrl} alt={appLogoAlt} className="h-8 w-auto" />
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {nav.map((item) => {
@@ -65,10 +63,7 @@ export function AppShell() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden h-14 border-b border-border flex items-center justify-between px-4 bg-card">
           <div className="flex items-center gap-2 font-semibold">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center text-primary-foreground" style={{ background: "var(--gradient-primary)" }}>
-              <Rocket className="w-4 h-4" />
-            </div>
-            Loor
+            <img src={appLogoUrl} alt={appLogoAlt} className="h-7 w-auto" />
           </div>
           <Button variant="ghost" size="sm" onClick={handleSignOut}><LogOut className="w-4 h-4" /></Button>
         </header>
