@@ -44,16 +44,79 @@ export type DocItem = {
   uploaded_at?: string;
 };
 
+export type CampaignInvestor = {
+  id: string;
+  name: string;
+  email: string;
+  cpf_masked: string;
+  invested_amount: number;
+  quotas: number;
+  status: "reserved" | "paid";
+  invested_at: string;
+};
+
+export type Installment = {
+  id: string;
+  number: number;
+  amount: number;
+  due_date: string;
+  paid_at: string | null;
+  status: "pending" | "paid" | "overdue";
+};
+
+export type CampaignMember = {
+  id: string;
+  name: string;
+  role: string;
+  avatar_url: string;
+};
+
+export type EquityDetails = {
+  type: "equity";
+  participation: number; // % da empresa ofertada
+};
+
+export type DebtDetails = {
+  type: "debt";
+  percentage_profitability: number; // taxa % a.a.
+  payment_frequency: "monthly" | "quarterly" | "semiannual" | "annual" | "at_maturity";
+  grace_period: number; // meses
+  total_installments: number;
+  single_installment: boolean;
+  installments: Installment[];
+};
+
 export type Campaign = {
   id: string;
   name: string;
   modality: "equity" | "debt";
   goal: number;
+  min_goal: number;
   raised: number;
   investors: number;
+  quota_value: number;
+  total_quotas: number;
+  available_quotas: number;
   status: "review" | "active" | "finished" | "archived";
   due_at: string;
+  opened_at: string | null;
   segment: string;
+  description: string;
+  about: string;
+  business_name: string;
+  company_cnpj: string;
+  whatsapp_group: string;
+  promotional_video_url: string | null;
+  image_url: string | null;
+  warranty_amount: number;
+  loor_fee_percent: number;
+  fundraising_completion: "flexible" | "all_or_nothing";
+  resource_utilization: string;
+  is_private: boolean;
+  members: CampaignMember[];
+  investor_list: CampaignInvestor[];
+  equity?: EquityDetails;
+  debt?: DebtDetails;
 };
 
 export type AppUser = { email: string; full_name: string; phone: string };
@@ -82,10 +145,203 @@ const DEFAULT_DOCS: DocItem[] = [
 ];
 
 const DEFAULT_CAMPAIGNS: Campaign[] = [
-  { id: "c1", name: "AgroTech Solar", modality: "equity", goal: 1500000, raised: 980000, investors: 142, status: "active", due_at: "2026-08-15", segment: "Agronegócio" },
-  { id: "c2", name: "MedFlow Saúde", modality: "debt", goal: 800000, raised: 620000, investors: 89, status: "active", due_at: "2026-07-30", segment: "Saúde" },
-  { id: "c3", name: "EduPlay Kids", modality: "equity", goal: 500000, raised: 175000, investors: 34, status: "active", due_at: "2026-09-10", segment: "Educação" },
-  { id: "c4", name: "FinPay Express", modality: "debt", goal: 2000000, raised: 2000000, investors: 310, status: "finished", due_at: "2026-05-01", segment: "Fintech" },
+  {
+    id: "c1",
+    name: "AgroTech Solar",
+    modality: "equity",
+    goal: 1500000,
+    min_goal: 990000,
+    raised: 980000,
+    investors: 142,
+    quota_value: 5000,
+    total_quotas: 300,
+    available_quotas: 104,
+    status: "active",
+    due_at: "2026-08-15",
+    opened_at: "2026-04-01",
+    segment: "Agronegócio",
+    description: "A AgroTech Solar combina painéis solares inteligentes com irrigação automatizada, reduzindo custos de energia em até 70% para produtores rurais de médio porte.",
+    about: "Fundada em 2023 por engenheiros agrônomos e especialistas em energia renovável, a AgroTech Solar já atende 45 fazendas no interior de São Paulo e Minas Gerais. A captação será utilizada para expandir operações para o Centro-Oeste e desenvolver a segunda geração do sistema de monitoramento IoT.",
+    business_name: "AgroTech Solar Energia Ltda",
+    company_cnpj: "45.123.456/0001-78",
+    whatsapp_group: "https://chat.whatsapp.com/agrotech-investidores",
+    promotional_video_url: "https://www.youtube.com/watch?v=example1",
+    image_url: "https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=800",
+    warranty_amount: 150000,
+    loor_fee_percent: 5,
+    fundraising_completion: "flexible",
+    resource_utilization: "Expansão territorial, P&D segunda geração, contratação de equipe comercial",
+    is_private: false,
+    members: [
+      { id: "m1", name: "Carlos Mendes", role: "CEO & Co-founder", avatar_url: "https://i.pravatar.cc/150?u=carlos" },
+      { id: "m2", name: "Ana Souza", role: "CTO", avatar_url: "https://i.pravatar.cc/150?u=ana" },
+      { id: "m3", name: "Ricardo Lima", role: "Diretor Comercial", avatar_url: "https://i.pravatar.cc/150?u=ricardo" },
+    ],
+    investor_list: [
+      { id: "inv1", name: "João Silva", email: "joao@email.com", cpf_masked: "***.***.***-12", invested_amount: 25000, quotas: 5, status: "paid", invested_at: "2026-04-05" },
+      { id: "inv2", name: "Maria Santos", email: "maria@email.com", cpf_masked: "***.***.***-34", invested_amount: 50000, quotas: 10, status: "paid", invested_at: "2026-04-08" },
+      { id: "inv3", name: "Pedro Oliveira", email: "pedro@email.com", cpf_masked: "***.***.***-56", invested_amount: 15000, quotas: 3, status: "paid", invested_at: "2026-04-12" },
+      { id: "inv4", name: "Fernanda Costa", email: "fernanda@email.com", cpf_masked: "***.***.***-78", invested_amount: 100000, quotas: 20, status: "paid", invested_at: "2026-04-15" },
+      { id: "inv5", name: "Lucas Ferreira", email: "lucas@email.com", cpf_masked: "***.***.***-90", invested_amount: 10000, quotas: 2, status: "reserved", invested_at: "2026-06-20" },
+    ],
+    equity: { type: "equity", participation: 12.5 },
+  },
+  {
+    id: "c2",
+    name: "MedFlow Saúde",
+    modality: "debt",
+    goal: 800000,
+    min_goal: 528000,
+    raised: 620000,
+    investors: 89,
+    quota_value: 2000,
+    total_quotas: 400,
+    available_quotas: 90,
+    status: "active",
+    due_at: "2026-07-30",
+    opened_at: "2026-03-15",
+    segment: "Saúde",
+    description: "Plataforma SaaS para gestão de clínicas e consultórios médicos com prontuário eletrônico, agendamento inteligente e telemedicina integrada.",
+    about: "A MedFlow atende mais de 200 clínicas em 12 estados. Com a captação via dívida conversível, planeja integrar IA para triagem e expandir para o mercado de hospitais de pequeno porte. Rentabilidade de 18% a.a. com pagamento mensal após 6 meses de carência.",
+    business_name: "MedFlow Tecnologia em Saúde S.A.",
+    company_cnpj: "32.987.654/0001-12",
+    whatsapp_group: "https://chat.whatsapp.com/medflow-investidores",
+    promotional_video_url: null,
+    image_url: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800",
+    warranty_amount: 200000,
+    loor_fee_percent: 4,
+    fundraising_completion: "all_or_nothing",
+    resource_utilization: "Desenvolvimento IA, infraestrutura cloud, marketing B2B",
+    is_private: false,
+    members: [
+      { id: "m4", name: "Dra. Beatriz Almeida", role: "CEO & Fundadora", avatar_url: "https://i.pravatar.cc/150?u=beatriz" },
+      { id: "m5", name: "Thiago Rocha", role: "CTO", avatar_url: "https://i.pravatar.cc/150?u=thiago" },
+    ],
+    investor_list: [
+      { id: "inv6", name: "Roberto Nunes", email: "roberto@email.com", cpf_masked: "***.***.***-11", invested_amount: 20000, quotas: 10, status: "paid", invested_at: "2026-03-20" },
+      { id: "inv7", name: "Camila Dias", email: "camila@email.com", cpf_masked: "***.***.***-22", invested_amount: 40000, quotas: 20, status: "paid", invested_at: "2026-03-25" },
+      { id: "inv8", name: "André Martins", email: "andre@email.com", cpf_masked: "***.***.***-33", invested_amount: 10000, quotas: 5, status: "reserved", invested_at: "2026-06-18" },
+    ],
+    debt: {
+      type: "debt",
+      percentage_profitability: 18,
+      payment_frequency: "monthly",
+      grace_period: 6,
+      total_installments: 24,
+      single_installment: false,
+      installments: [
+        { id: "inst1", number: 1, amount: 36667, due_date: "2026-10-15", paid_at: null, status: "pending" },
+        { id: "inst2", number: 2, amount: 36667, due_date: "2026-11-15", paid_at: null, status: "pending" },
+        { id: "inst3", number: 3, amount: 36667, due_date: "2026-12-15", paid_at: null, status: "pending" },
+        { id: "inst4", number: 4, amount: 36667, due_date: "2027-01-15", paid_at: null, status: "pending" },
+        { id: "inst5", number: 5, amount: 36667, due_date: "2027-02-15", paid_at: null, status: "pending" },
+        { id: "inst6", number: 6, amount: 36667, due_date: "2027-03-15", paid_at: null, status: "pending" },
+        { id: "inst7", number: 7, amount: 36667, due_date: "2027-04-15", paid_at: null, status: "pending" },
+        { id: "inst8", number: 8, amount: 36667, due_date: "2027-05-15", paid_at: null, status: "pending" },
+        { id: "inst9", number: 9, amount: 36667, due_date: "2027-06-15", paid_at: null, status: "pending" },
+        { id: "inst10", number: 10, amount: 36667, due_date: "2027-07-15", paid_at: null, status: "pending" },
+        { id: "inst11", number: 11, amount: 36667, due_date: "2027-08-15", paid_at: null, status: "pending" },
+        { id: "inst12", number: 12, amount: 36667, due_date: "2027-09-15", paid_at: null, status: "pending" },
+      ],
+    },
+  },
+  {
+    id: "c3",
+    name: "EduPlay Kids",
+    modality: "equity",
+    goal: 500000,
+    min_goal: 330000,
+    raised: 175000,
+    investors: 34,
+    quota_value: 1000,
+    total_quotas: 500,
+    available_quotas: 325,
+    status: "active",
+    due_at: "2026-09-10",
+    opened_at: "2026-05-01",
+    segment: "Educação",
+    description: "Plataforma gamificada de educação infantil que transforma aprendizagem em aventura, com conteúdos alinhados à BNCC para crianças de 4 a 10 anos.",
+    about: "A EduPlay Kids já tem 15.000 assinantes ativos e parcerias com 80 escolas particulares. O investimento será usado para expandir o catálogo de conteúdos, desenvolver app offline e iniciar operação em Portugal e Angola.",
+    business_name: "EduPlay Tecnologia Educacional Ltda",
+    company_cnpj: "28.456.789/0001-55",
+    whatsapp_group: "https://chat.whatsapp.com/eduplay-investidores",
+    promotional_video_url: "https://www.youtube.com/watch?v=example3",
+    image_url: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800",
+    warranty_amount: 50000,
+    loor_fee_percent: 5,
+    fundraising_completion: "flexible",
+    resource_utilization: "Produção de conteúdo, desenvolvimento mobile, expansão internacional",
+    is_private: false,
+    members: [
+      { id: "m6", name: "Juliana Barros", role: "CEO", avatar_url: "https://i.pravatar.cc/150?u=juliana" },
+      { id: "m7", name: "Marcos Tavares", role: "Head de Conteúdo", avatar_url: "https://i.pravatar.cc/150?u=marcos" },
+      { id: "m8", name: "Patrícia Lopes", role: "Diretora Pedagógica", avatar_url: "https://i.pravatar.cc/150?u=patricia" },
+    ],
+    investor_list: [
+      { id: "inv9", name: "Gabriel Moreira", email: "gabriel@email.com", cpf_masked: "***.***.***-44", invested_amount: 5000, quotas: 5, status: "paid", invested_at: "2026-05-10" },
+      { id: "inv10", name: "Larissa Campos", email: "larissa@email.com", cpf_masked: "***.***.***-55", invested_amount: 30000, quotas: 30, status: "paid", invested_at: "2026-05-15" },
+    ],
+    equity: { type: "equity", participation: 8.0 },
+  },
+  {
+    id: "c4",
+    name: "FinPay Express",
+    modality: "debt",
+    goal: 2000000,
+    min_goal: 1320000,
+    raised: 2000000,
+    investors: 310,
+    quota_value: 5000,
+    total_quotas: 400,
+    available_quotas: 0,
+    status: "finished",
+    due_at: "2026-05-01",
+    opened_at: "2025-11-01",
+    segment: "Fintech",
+    description: "Infraestrutura de pagamentos instantâneos para PMEs com taxas competitivas e antecipação de recebíveis em até 1 hora.",
+    about: "A FinPay processou R$ 850 milhões em transações no último ano. A captação via dívida de R$ 2M foi concluída com sucesso e os recursos estão sendo aplicados em expansão da carteira de crédito e desenvolvimento de API bancária white-label.",
+    business_name: "FinPay Express Pagamentos S.A.",
+    company_cnpj: "51.234.567/0001-99",
+    whatsapp_group: "https://chat.whatsapp.com/finpay-investidores",
+    promotional_video_url: "https://www.youtube.com/watch?v=example4",
+    image_url: "https://images.unsplash.com/photo-1563013544-824ae1b704d3?w=800",
+    warranty_amount: 500000,
+    loor_fee_percent: 3.5,
+    fundraising_completion: "all_or_nothing",
+    resource_utilization: "Expansão de crédito, desenvolvimento API white-label, compliance",
+    is_private: false,
+    members: [
+      { id: "m9", name: "Rafael Mendonça", role: "CEO", avatar_url: "https://i.pravatar.cc/150?u=rafael" },
+      { id: "m10", name: "Isabela Ramos", role: "CFO", avatar_url: "https://i.pravatar.cc/150?u=isabela" },
+      { id: "m11", name: "Diego Santana", role: "CTO", avatar_url: "https://i.pravatar.cc/150?u=diego" },
+      { id: "m12", name: "Carla Figueiredo", role: "Head Jurídico", avatar_url: "https://i.pravatar.cc/150?u=carla" },
+    ],
+    investor_list: [
+      { id: "inv11", name: "Marcos Vieira", email: "marcos.v@email.com", cpf_masked: "***.***.***-66", invested_amount: 50000, quotas: 10, status: "paid", invested_at: "2025-11-05" },
+      { id: "inv12", name: "Renata Gomes", email: "renata@email.com", cpf_masked: "***.***.***-77", invested_amount: 100000, quotas: 20, status: "paid", invested_at: "2025-11-10" },
+      { id: "inv13", name: "Paulo Ribeiro", email: "paulo@email.com", cpf_masked: "***.***.***-88", invested_amount: 25000, quotas: 5, status: "paid", invested_at: "2025-11-20" },
+    ],
+    debt: {
+      type: "debt",
+      percentage_profitability: 15.5,
+      payment_frequency: "monthly",
+      grace_period: 3,
+      total_installments: 18,
+      single_installment: false,
+      installments: [
+        { id: "inst20", number: 1, amount: 122222, due_date: "2026-02-01", paid_at: "2026-02-01", status: "paid" },
+        { id: "inst21", number: 2, amount: 122222, due_date: "2026-03-01", paid_at: "2026-03-01", status: "paid" },
+        { id: "inst22", number: 3, amount: 122222, due_date: "2026-04-01", paid_at: "2026-04-01", status: "paid" },
+        { id: "inst23", number: 4, amount: 122222, due_date: "2026-05-01", paid_at: "2026-05-01", status: "paid" },
+        { id: "inst24", number: 5, amount: 122222, due_date: "2026-06-01", paid_at: "2026-06-01", status: "paid" },
+        { id: "inst25", number: 6, amount: 122222, due_date: "2026-07-01", paid_at: null, status: "pending" },
+        { id: "inst26", number: 7, amount: 122222, due_date: "2026-08-01", paid_at: null, status: "pending" },
+        { id: "inst27", number: 8, amount: 122222, due_date: "2026-09-01", paid_at: null, status: "pending" },
+        { id: "inst28", number: 9, amount: 122222, due_date: "2026-10-01", paid_at: null, status: "pending" },
+        { id: "inst29", number: 10, amount: 122222, due_date: "2026-11-01", paid_at: null, status: "pending" },
+      ],
+    },
+  },
 ];
 
 function read<T>(key: string, fallback: T): T {

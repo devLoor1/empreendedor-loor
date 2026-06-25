@@ -8,6 +8,7 @@ import CompanyPage from "@/pages/perfil-empresa";
 import PersonalPage from "@/pages/perfil-pessoal";
 import DocsPage from "@/pages/documentos";
 import CampaignsPage from "@/pages/campanhas";
+import CampaignDetail from "@/pages/campanha-detalhe";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = mockStore.getUser();
@@ -40,6 +41,7 @@ export default function App() {
           <Route path="perfil-pessoal" element={<PersonalPage />} />
           <Route path="documentos" element={<DocsPage />} />
           <Route path="campanhas" element={<CampaignsPage />} />
+          <Route path="campanhas/:id" element={<CampaignDetail />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
