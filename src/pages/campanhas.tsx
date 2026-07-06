@@ -1,23 +1,74 @@
 import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { Users, Calendar, TrendingUp, Plus, Lock, CheckCircle2, Archive } from "lucide-react";
-import { mockStore, useMock, formatBRLFromReais } from "@/lib/mock-store";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone } from "lucide-react";
+import {
+  getActiveOpportunities,
+  getReviewOpportunities,
+  getArchivedOpportunities,
+  getFinishedOpportunities,
+} from "@/services/api";
+
+type GoalData = {
+  confirmed_payment: number;
+  confirmed_payment_percentage: number;
+  unconfirmed_payment: number;
+  max_goal: number;
+  min_goal: number;
+  percentage_awaiting_payment: number;
+};
+
+type ActiveOpp = {
+  id: number;
+  due_at: string;
+  modality: string;
+  name: string;
+  segment: string;
+  total_investors: number;
+  goal: GoalData;
+};
+
+type SimpleOpp = {
+  id: number;
+  name: string;
+  segment: string;
+  modality: string;
+  image?: string;
+  created_at?: string;
+  end_at?: string;
+  reason_for_archiving?: string | null;
+};
+
+function formatBRL(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 export default function CampaignsPage() {
-  const campaigns = useMock(() => mockStore.getCampaigns());
-  const company = useMock(() => mockStore.getCompany());
-  const personal = useMock(() => mockStore.getPersonal());
-  const docs = useMock(() => mockStore.getDocs());
-  const docsDone = docs.filter((d) => d.required).every((d) => d.status !== "missing");
-  const canCreate = !!company && !!personal && docsDone;
+  const [active, setActive] = useState<ActiveOpp[]>([]);
+  const [review, setReview] = useState<SimpleOpp[]>([]);
+  const [archived, setArchived] = useState<SimpleOpp[]>([]);
+  const [finished, setFinished] = useState<SimpleOpp[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const active = campaigns.filter((c) => c.status === "active");
-  const finished = campaigns.filter((c) => c.status === "finished");
-  const review = campaigns.filter((c) => c.status === "review");
-  const archived = campaigns.filter((c) => c.status === "archived");
+  useEffect(() => {
+    Promise.all([
+      getActiveOpportunities().catch(() => ({ data: [] })),
+      getReviewOpportunities().catch(() => ({ data: [] })),
+      getArchivedOpportunities().catch(() => ({ data: [] })),
+      getFinishedOpportunities().catch(() => ({ data: [] })),
+    ]).then(([act, rev, arc, fin]) => {
+      setActive(act?.data ?? []);
+      setReview(rev?.data ?? []);
+      setArchived(arc?.data ?? []);
+      setFinished(fin?.data ?? []);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const total = active.length + review.length + archived.length + finished.length;
+
+  if (loading) return <CampaignsSkeleton />;
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -26,85 +77,158 @@ export default function CampaignsPage() {
           <h1 className="text-3xl font-bold text-foreground">Campanhas</h1>
           <p className="text-muted-foreground mt-1">Gerencie e acompanhe todas as suas campanhas de captação.</p>
         </div>
-        <Button disabled={!canCreate} className="gap-2">
-          {canCreate ? <Plus className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
-          {canCreate ? "Nova campanha" : "Complete o cadastro"}
-        </Button>
       </header>
 
-      {!canCreate && (
-        <Card className="p-4 border-warning/40 bg-warning/10 text-sm flex items-center justify-between gap-4 flex-wrap">
-          <span className="text-foreground">Para criar uma campanha conforme a CVM 88, complete perfil, dados pessoais e documentação.</span>
-          <Button asChild size="sm" variant="outline"><Link to="/app/dashboard">Ver pendências</Link></Button>
-        </Card>
-      )}
-
       {active.length > 0 && (
-        <CampaignSection icon={TrendingUp} title="Ativas" campaigns={active} />
+        <section className="space-y-3">
+          <SectionTitle icon={TrendingUp} title="Ativas" count={active.length} />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {active.map((c) => {
+              const paidPct = Math.min(c.goal.confirmed_payment_percentage, 100);
+              const pendingPct = Math.min(c.goal.percentage_awaiting_payment, 100 - paidPct);
+              return (
+                <Link key={c.id} to={`/app/campanhas/${c.id}`} className="block group">
+                  <Card className="p-5 border-border/60 hover:shadow-[var(--shadow-elegant)] transition-all group-hover:-translate-y-0.5 flex flex-col h-full">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <h3 className="font-semibold text-foreground leading-tight">{c.name}</h3>
+                        <p className="text-xs text-muted-foreground">{c.segment}</p>
+                      </div>
+                      <Badge variant={c.modality === "equity" ? "default" : "secondary"} className="capitalize shrink-0">
+                        {c.modality === "equity" ? "Equity" : "Dívida"}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs text-muted-foreground">
+                        <span>Meta mín: {formatBRL(c.goal.min_goal)}</span>
+                        <span>Meta máx: {formatBRL(c.goal.max_goal)}</span>
+                      </div>
+                      <div className="relative h-2 rounded-full bg-muted overflow-hidden">
+                        <div className="absolute left-0 top-0 h-full bg-primary rounded-full" style={{ width: `${paidPct}%` }} />
+                        <div className="absolute top-0 h-full bg-primary/30 rounded-full" style={{ left: `${paidPct}%`, width: `${pendingPct}%` }} />
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-primary font-medium">{formatBRL(c.goal.confirmed_payment)} ({paidPct.toFixed(1)}%)</span>
+                        <span className="text-muted-foreground">{formatBRL(c.goal.unconfirmed_payment)} pend.</span>
+                      </div>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {c.total_investors} investidores</div>
+                      <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(c.due_at).toLocaleDateString("pt-BR")}</div>
+                    </div>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {review.length > 0 && (
-        <CampaignSection icon={Calendar} title="Em análise" campaigns={review} />
+        <section className="space-y-3">
+          <SectionTitle icon={Calendar} title="Em análise" count={review.length} />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {review.map((c) => (
+              <Link key={c.id} to={`/app/campanhas/${c.id}`} className="block group">
+                <Card className="p-5 border-border/60 hover:shadow-[var(--shadow-elegant)] transition-all group-hover:-translate-y-0.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold text-foreground">{c.name}</h3>
+                      <p className="text-xs text-muted-foreground">{c.segment}</p>
+                    </div>
+                    <Badge variant="secondary" className="capitalize shrink-0">
+                      {c.modality === "equity" ? "Equity" : "Dívida"}
+                    </Badge>
+                  </div>
+                  {c.created_at && (
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Submetida em {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                    </p>
+                  )}
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {finished.length > 0 && (
-        <CampaignSection icon={CheckCircle2} title="Concluídas" campaigns={finished} />
+        <section className="space-y-3">
+          <SectionTitle icon={CheckCircle2} title="Concluídas" count={finished.length} />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {finished.map((c) => (
+              <Link key={c.id} to={`/app/campanhas/${c.id}`} className="block group">
+                <Card className="p-5 border-border/60 hover:shadow-[var(--shadow-elegant)] transition-all group-hover:-translate-y-0.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold text-foreground">{c.name}</h3>
+                      <p className="text-xs text-muted-foreground">{c.segment}</p>
+                    </div>
+                    <Badge className="capitalize shrink-0 bg-success text-success-foreground hover:bg-success">
+                      {c.modality === "equity" ? "Equity" : "Dívida"}
+                    </Badge>
+                  </div>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
       {archived.length > 0 && (
-        <CampaignSection icon={Archive} title="Arquivadas" campaigns={archived} />
+        <section className="space-y-3">
+          <SectionTitle icon={Archive} title="Arquivadas" count={archived.length} />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {archived.map((c) => (
+              <Link key={c.id} to={`/app/campanhas/${c.id}`} className="block group">
+                <Card className="p-5 border-border/60 opacity-70 hover:opacity-100 transition-all">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h3 className="font-semibold text-foreground">{c.name}</h3>
+                      <p className="text-xs text-muted-foreground">{c.segment}</p>
+                    </div>
+                    <Badge variant="outline" className="capitalize shrink-0">Arquivada</Badge>
+                  </div>
+                  {c.reason_for_archiving && (
+                    <p className="text-xs text-muted-foreground mt-2">{c.reason_for_archiving}</p>
+                  )}
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
       )}
 
-      {campaigns.length === 0 && (
-        <Card className="p-10 text-center border-border/60">
-          <p className="text-muted-foreground">Nenhuma campanha criada ainda.</p>
+      {total === 0 && (
+        <Card className="p-10 text-center border-border/60 space-y-3">
+          <div className="flex justify-center">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Megaphone className="w-6 h-6 text-primary" />
+            </div>
+          </div>
+          <p className="font-semibold text-foreground">Nenhuma campanha criada ainda</p>
+          <p className="text-sm text-muted-foreground">Complete seu perfil e documentação para lançar sua primeira campanha.</p>
         </Card>
       )}
     </div>
   );
 }
 
-function CampaignSection({ icon: Icon, title, campaigns }: { icon: any; title: string; campaigns: ReturnType<typeof mockStore.getCampaigns> }) {
+function SectionTitle({ icon: Icon, title, count }: { icon: any; title: string; count: number }) {
   return (
-    <section>
-      <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground mb-3">
-        <Icon className="w-5 h-5" /> {title} ({campaigns.length})
-      </h2>
+    <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+      <Icon className="w-5 h-5" /> {title} <span className="text-muted-foreground font-normal text-sm">({count})</span>
+    </h2>
+  );
+}
+
+function CampaignsSkeleton() {
+  return (
+    <div className="space-y-6 max-w-6xl">
+      <Skeleton className="h-10 w-48" />
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {campaigns.map((c) => {
-          const pct = Math.round((c.raised / c.goal) * 100);
-          return (
-            <Link key={c.id} to={`/app/campanhas/${c.id}`} className="block group">
-              <Card className="p-5 border-border/60 hover:shadow-[var(--shadow-elegant)] transition-all group-hover:-translate-y-0.5 flex flex-col h-full">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{c.name}</h3>
-                    <p className="text-xs text-muted-foreground">{c.segment}</p>
-                  </div>
-                  <Badge variant={c.modality === "equity" ? "default" : "secondary"} className="capitalize">
-                    {c.modality === "equity" ? "Equity" : "Dívida"}
-                  </Badge>
-                </div>
-                <div className="mt-2">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-foreground">{formatBRLFromReais(c.raised)}</span>
-                    <span className="text-muted-foreground">{pct}%</span>
-                  </div>
-                  <Progress value={pct} className="h-2" />
-                  <div className="text-xs text-muted-foreground mt-1">Meta {formatBRLFromReais(c.goal)}</div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-border grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground"><Users className="w-3.5 h-3.5" /> {c.investors} investidores</div>
-                  <div className="flex items-center gap-2 text-muted-foreground"><Calendar className="w-3.5 h-3.5" /> {new Date(c.due_at).toLocaleDateString("pt-BR")}</div>
-                </div>
-                <Button variant="outline" size="sm" className="mt-4 gap-2 pointer-events-none">
-                  <TrendingUp className="w-4 h-4" /> Ver detalhes
-                </Button>
-              </Card>
-            </Link>
-          );
-        })}
+        {[1, 2, 3].map((i) => <Skeleton key={i} className="h-44 rounded-xl" />)}
       </div>
-    </section>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut } from "lucide-react";
-import { mockStore, useMock } from "@/lib/mock-store";
+import { useAuth } from "@/hooks/use-auth";
+import { logout } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { appLogoUrl, appLogoAlt } from "@/config/brand";
@@ -16,18 +17,19 @@ const nav = [
 export function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const user = useMock(() => mockStore.getUser());
+  const { user, signOut } = useAuth();
 
-  const handleSignOut = () => {
-    mockStore.signOut();
+  const handleSignOut = async () => {
+    try { await logout(); } catch { /* ignora erro de rede */ }
+    signOut();
     navigate("/auth");
   };
 
   return (
     <div className="min-h-screen flex bg-background">
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card">
-        <div className="h-16 flex items-center gap-2 px-6 border-b border-border">
-          <img src={appLogoUrl} alt={appLogoAlt} className="h-8 w-auto" />
+        <div className="h-20 flex items-center px-6 border-b border-border">
+          <img src={appLogoUrl} alt={appLogoAlt} className="h-14 w-auto max-w-[160px] object-contain" />
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {nav.map((item) => {
@@ -61,9 +63,9 @@ export function AppShell() {
         </div>
       </aside>
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="md:hidden h-14 border-b border-border flex items-center justify-between px-4 bg-card">
+        <header className="md:hidden h-16 border-b border-border flex items-center justify-between px-4 bg-card">
           <div className="flex items-center gap-2 font-semibold">
-            <img src={appLogoUrl} alt={appLogoAlt} className="h-7 w-auto" />
+            <img src={appLogoUrl} alt={appLogoAlt} className="h-10 w-auto max-w-[140px] object-contain" />
           </div>
           <Button variant="ghost" size="sm" onClick={handleSignOut}><LogOut className="w-4 h-4" /></Button>
         </header>

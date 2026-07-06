@@ -8,9 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { mockStore } from "@/lib/mock-store";
+import { login, register, recoverPassword, setToken } from "@/services/api";
+
+type View = "tabs" | "forgot";
 
 export default function AuthPage() {
+  const [view, setView] = useState<View>("tabs");
+
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <aside className="hidden lg:flex flex-col justify-between p-12 text-primary-foreground relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
@@ -35,23 +39,37 @@ export default function AuthPage() {
           <div className="lg:hidden flex items-center gap-2 text-xl font-semibold text-primary mb-6">
             <img src={appLogoUrl} alt={appLogoAlt} className="h-8 w-auto" />
           </div>
-          <h2 className="text-2xl font-semibold text-foreground">Bem-vindo(a) de volta</h2>
-          <p className="text-sm text-muted-foreground mt-1 mb-6">Acesse sua conta ou cadastre sua startup.</p>
-          <Tabs defaultValue="login">
-            <TabsList className="grid grid-cols-2 w-full mb-6">
-              <TabsTrigger value="login">Entrar</TabsTrigger>
-              <TabsTrigger value="register">Cadastrar startup</TabsTrigger>
-            </TabsList>
-            <TabsContent value="login"><LoginForm /></TabsContent>
-            <TabsContent value="register"><RegisterForm /></TabsContent>
-          </Tabs>
+
+          {view === "tabs" && (
+            <>
+              <h2 className="text-2xl font-semibold text-foreground">Bem-vindo(a) de volta</h2>
+              <p className="text-sm text-muted-foreground mt-1 mb-6">Acesse sua conta ou cadastre sua startup.</p>
+              <Tabs defaultValue="login">
+                <TabsList className="grid grid-cols-2 w-full mb-6">
+                  <TabsTrigger value="login">Entrar</TabsTrigger>
+                  <TabsTrigger value="register">Cadastrar startup</TabsTrigger>
+                </TabsList>
+                <TabsContent value="login"><LoginForm onForgot={() => setView("forgot")} /></TabsContent>
+                <TabsContent value="register"><RegisterForm /></TabsContent>
+              </Tabs>
+            </>
+          )}
+
+          {view === "forgot" && (
+            <>
+              <h2 className="text-2xl font-semibold text-foreground">Recuperar senha</h2>
+              <p className="text-sm text-muted-foreground mt-1 mb-6">Informe seu e-mail e enviaremos um link para redefinir sua senha.</p>
+              <ForgotForm onBack={() => setView("tabs")} />
+            </>
+          )}
+
         </Card>
       </main>
     </div>
   );
 }
 
-function LoginForm() {
+function LoginForm({ onForgot }: { onForgot: () => void }) {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -61,11 +79,20 @@ function LoginForm() {
     e.preventDefault();
     if (!email || !password) return toast.error("Preencha e-mail e senha");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 500));
-    const existing = mockStore.getUser();
-    mockStore.setUser({ email, full_name: existing?.full_name ?? email.split("@")[0], phone: existing?.phone ?? "" });
-    toast.success("Bem-vindo(a)!");
-    navigate("/app/dashboard");
+    try {
+      const res = await login(email, password);
+      setToken(res.data.token);
+      toast.success("Bem-vindo(a)!");
+      navigate("/app/dashboard");
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "E-mail ou senha inválidos";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -79,7 +106,9 @@ function LoginForm() {
         <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
       <Button type="submit" className="w-full" disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
-      <button type="button" className="text-sm text-muted-foreground hover:text-primary w-full text-center">Esqueci minha senha</button>
+      <button type="button" onClick={onForgot} className="text-sm text-muted-foreground hover:text-primary w-full text-center">
+        Esqueci minha senha
+      </button>
     </form>
   );
 }
@@ -94,10 +123,20 @@ function RegisterForm() {
     if (!form.full_name || !form.email || !form.password) return toast.error("Preencha os campos obrigatórios");
     if (form.password.length < 6) return toast.error("A senha deve ter ao menos 6 caracteres");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 600));
-    mockStore.setUser({ email: form.email, full_name: form.full_name, phone: form.phone });
-    toast.success("Cadastro realizado! Vamos completar seu perfil.");
-    navigate("/app/dashboard");
+    try {
+      const res = await register(form);
+      setToken(res.data.token);
+      toast.success("Cadastro realizado! Confirme seu e-mail para acessar a plataforma.");
+      navigate("/app/dashboard");
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "Erro ao criar conta. Verifique os dados e tente novamente.";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -123,3 +162,51 @@ function RegisterForm() {
     </form>
   );
 }
+
+function ForgotForm({ onBack }: { onBack: () => void }) {
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return toast.error("Informe seu e-mail");
+    setLoading(true);
+    try {
+      await recoverPassword(email);
+      setSent(true);
+      toast.success("E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+    } catch (err: any) {
+      const msg =
+        err?.errors?.[0]?.message ||
+        err?.message ||
+        "Não foi possível enviar o e-mail. Verifique o endereço informado.";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (sent) {
+    return (
+      <div className="space-y-4 text-center">
+        <p className="text-sm text-muted-foreground">
+          Enviamos um link para <strong>{email}</strong>. Acesse seu e-mail e clique no link para redefinir sua senha.
+        </p>
+        <Button variant="outline" className="w-full" onClick={onBack}>Voltar ao login</Button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="forgot-email">E-mail</Label>
+        <Input id="forgot-email" type="email" placeholder="voce@startup.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+      </div>
+      <Button type="submit" className="w-full" disabled={loading}>{loading ? "Enviando..." : "Enviar link de recuperação"}</Button>
+      <Button type="button" variant="ghost" className="w-full" onClick={onBack}>Voltar ao login</Button>
+    </form>
+  );
+}
+

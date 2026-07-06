@@ -204,6 +204,13 @@ export async function payNextInstallment(opportunityId: number) {
   });
 }
 
+export async function debtSimulatePayment(txid: string) {
+  return apiFetch(`/dev/debt/pay-by-txid`, {
+    method: 'POST',
+    body: JSON.stringify({ txid }),
+  });
+}
+
 // ── Documents ─────────────────────────────────────────────────────────────────
 
 export async function getOpportunityDocuments(id: number) {

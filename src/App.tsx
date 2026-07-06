@@ -1,24 +1,24 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
-import { mockStore } from "@/lib/mock-store";
+import { isAuthenticated } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import AuthPage from "@/pages/auth";
+import ChangePasswordPage from "@/pages/change-password";
 import Dashboard from "@/pages/dashboard";
 import CompanyPage from "@/pages/perfil-empresa";
 import PersonalPage from "@/pages/perfil-pessoal";
 import DocsPage from "@/pages/documentos";
 import CampaignsPage from "@/pages/campanhas";
 import CampaignDetail from "@/pages/campanha-detalhe";
+import CampaignDebtPage from "@/pages/campanha-divida";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const user = mockStore.getUser();
-  if (!user) return <Navigate to="/auth" replace />;
+  if (!isAuthenticated()) return <Navigate to="/auth" replace />;
   return <>{children}</>;
 }
 
 function RootRedirect() {
-  const user = mockStore.getUser();
-  return <Navigate to={user ? "/app/dashboard" : "/auth"} replace />;
+  return <Navigate to={isAuthenticated() ? "/app/dashboard" : "/auth"} replace />;
 }
 
 export default function App() {
@@ -27,6 +27,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/entrepreneur/change-password/:token" element={<ChangePasswordPage />} />
         <Route
           path="/app"
           element={
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="documentos" element={<DocsPage />} />
           <Route path="campanhas" element={<CampaignsPage />} />
           <Route path="campanhas/:id" element={<CampaignDetail />} />
+          <Route path="campanhas/:id/divida" element={<CampaignDebtPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
