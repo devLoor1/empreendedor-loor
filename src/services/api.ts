@@ -32,12 +32,12 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  // Adiciona slug como campo extra no corpo da requisição se existir body e for JSON
+  // Adiciona platform_slug como campo extra no corpo da requisição se existir body e for JSON
   let body = options.body;
   if (slug && body && typeof body === 'string' && headers['Content-Type']?.includes('application/json')) {
     try {
       const parsedBody = JSON.parse(body);
-      parsedBody.slug = slug;
+      parsedBody.platform_slug = slug;
       body = JSON.stringify(parsedBody);
     } catch (e) {
       // Se não conseguir parsear, mantém o body original
@@ -114,9 +114,9 @@ export async function updateAvatar(formData: FormData) {
   const token = getToken();
   const slug = import.meta.env.VITE_API_SLUG;
   
-  // Para FormData, adiciona o slug como um campo
+  // Para FormData, adiciona o platform_slug como um campo
   if (slug) {
-    formData.append('slug', slug);
+    formData.append('platform_slug', slug);
   }
   
   const res = await fetch(`${API_BASE}/entrepreneurs/profile/avatar`, {
@@ -246,9 +246,9 @@ export async function uploadImage(formData: FormData) {
   const token = getToken();
   const slug = import.meta.env.VITE_API_SLUG;
   
-  // Para FormData, adiciona o slug como um campo
+  // Para FormData, adiciona o platform_slug como um campo
   if (slug) {
-    formData.append('slug', slug);
+    formData.append('platform_slug', slug);
   }
   
   const res = await fetch(`${API_BASE}/entrepreneurs/images`, {
