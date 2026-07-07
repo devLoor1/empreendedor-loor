@@ -20,18 +20,34 @@ export function clearToken() {
 
 async function apiFetch(path: string, options: RequestInit = {}) {
   const token = getToken();
+  const slug = import.meta.env.VITE_API_SLUG;
+  
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json',
     ...(options.headers as Record<string, string> || {}),
   };
+  
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Adiciona slug como campo extra no corpo da requisição se existir body e for JSON
+  let body = options.body;
+  if (slug && body && typeof body === 'string' && headers['Content-Type']?.includes('application/json')) {
+    try {
+      const parsedBody = JSON.parse(body);
+      parsedBody.slug = slug;
+      body = JSON.stringify(parsedBody);
+    } catch (e) {
+      // Se não conseguir parsear, mantém o body original
+    }
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
+    body,
   });
 
   if (!res.ok) {
@@ -96,6 +112,13 @@ export async function updatePersonalInformation(data: Record<string, any>) {
 
 export async function updateAvatar(formData: FormData) {
   const token = getToken();
+  const slug = import.meta.env.VITE_API_SLUG;
+  
+  // Para FormData, adiciona o slug como um campo
+  if (slug) {
+    formData.append('slug', slug);
+  }
+  
   const res = await fetch(`${API_BASE}/entrepreneurs/profile/avatar`, {
     method: 'PUT',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -221,6 +244,13 @@ export async function getOpportunityDocuments(id: number) {
 
 export async function uploadImage(formData: FormData) {
   const token = getToken();
+  const slug = import.meta.env.VITE_API_SLUG;
+  
+  // Para FormData, adiciona o slug como um campo
+  if (slug) {
+    formData.append('slug', slug);
+  }
+  
   const res = await fetch(`${API_BASE}/entrepreneurs/images`, {
     method: 'POST',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
