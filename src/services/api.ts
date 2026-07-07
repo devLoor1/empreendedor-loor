@@ -31,6 +31,10 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  
+  if (slug) {
+    headers['x-whitelabel-slug'] = slug;
+  }
 
   // Adiciona platform_slug como campo extra no corpo da requisição se existir body e for JSON
   let body = options.body;
@@ -119,9 +123,17 @@ export async function updateAvatar(formData: FormData) {
     formData.append('platform_slug', slug);
   }
   
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (slug) {
+    headers['x-whitelabel-slug'] = slug;
+  }
+  
   const res = await fetch(`${API_BASE}/entrepreneurs/profile/avatar`, {
     method: 'PUT',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers,
     body: formData,
   });
   if (!res.ok) throw await res.json().catch(() => ({}));
@@ -251,9 +263,17 @@ export async function uploadImage(formData: FormData) {
     formData.append('platform_slug', slug);
   }
   
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  if (slug) {
+    headers['x-whitelabel-slug'] = slug;
+  }
+  
   const res = await fetch(`${API_BASE}/entrepreneurs/images`, {
     method: 'POST',
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers,
     body: formData,
   });
   if (!res.ok) throw await res.json().catch(() => ({}));
