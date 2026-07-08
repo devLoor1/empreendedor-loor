@@ -1,19 +1,22 @@
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
+import { MailCheck, Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
 import { appLogoUrl, appLogoAlt } from "@/config/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { login, register, recoverPassword, setToken } from "@/services/api";
 
 type View = "tabs" | "forgot";
+type AuthTab = "login" | "register";
 
 export default function AuthPage() {
   const [view, setView] = useState<View>("tabs");
+  const [authTab, setAuthTab] = useState<AuthTab>("login");
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
@@ -44,13 +47,13 @@ export default function AuthPage() {
             <>
               <h2 className="text-2xl font-semibold text-foreground">Bem-vindo(a) de volta</h2>
               <p className="text-sm text-muted-foreground mt-1 mb-6">Acesse sua conta ou cadastre sua startup.</p>
-              <Tabs defaultValue="login">
+              <Tabs value={authTab} onValueChange={(value) => setAuthTab(value as AuthTab)}>
                 <TabsList className="grid grid-cols-2 w-full mb-6">
                   <TabsTrigger value="login">Entrar</TabsTrigger>
                   <TabsTrigger value="register">Cadastrar startup</TabsTrigger>
                 </TabsList>
                 <TabsContent value="login"><LoginForm onForgot={() => setView("forgot")} /></TabsContent>
-                <TabsContent value="register"><RegisterForm /></TabsContent>
+                <TabsContent value="register"><RegisterForm onBackToLogin={() => setAuthTab("login")} /></TabsContent>
               </Tabs>
             </>
           )}
@@ -113,10 +116,10 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
   );
 }
 
-function RegisterForm() {
-  const navigate = useNavigate();
+function RegisterForm({ onBackToLogin }: { onBackToLogin: () => void }) {
   const [form, setForm] = useState({ full_name: "", email: "", phone: "", password: "" });
   const [loading, setLoading] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,10 +127,10 @@ function RegisterForm() {
     if (form.password.length < 6) return toast.error("A senha deve ter ao menos 6 caracteres");
     setLoading(true);
     try {
-      const res = await register(form);
-      setToken(res.data.token);
-      toast.success("Cadastro realizado! Confirme seu e-mail para acessar a plataforma.");
-      navigate("/app/dashboard");
+      await register(form);
+      setRegisteredEmail(form.email);
+      setForm({ full_name: "", email: "", phone: "", password: "" });
+      toast.success("Cadastro realizado. Confirme seu e-mail antes de entrar.");
     } catch (err: any) {
       const msg =
         err?.errors?.[0]?.message ||
@@ -138,6 +141,33 @@ function RegisterForm() {
       setLoading(false);
     }
   };
+
+  if (registeredEmail) {
+    return (
+      <div className="space-y-5 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <MailCheck className="h-6 w-6" />
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-foreground">Registro concluído</h3>
+          <p className="text-sm text-muted-foreground">
+            Enviamos um link de confirmação para <strong className="text-foreground">{registeredEmail}</strong>.
+            Confirme o e-mail antes de acessar a plataforma.
+          </p>
+        </div>
+        <Alert className="text-left">
+          <AlertTitle>Validação de e-mail pendente</AlertTitle>
+          <AlertDescription>
+            Em QA/local, verifique também a captura SMTP configurada. Depois de confirmar o e-mail,
+            volte para o login e acesse com a senha cadastrada.
+          </AlertDescription>
+        </Alert>
+        <Button type="button" className="w-full" onClick={onBackToLogin}>
+          Ir para login
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -157,7 +187,7 @@ function RegisterForm() {
         <Label htmlFor="r-pwd">Senha</Label>
         <Input id="r-pwd" type="password" placeholder="Mín. 6 caracteres" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>{loading ? "Criando conta..." : "Criar conta e entrar"}</Button>
+      <Button type="submit" className="w-full" disabled={loading}>{loading ? "Criando conta..." : "Criar conta"}</Button>
       <p className="text-xs text-muted-foreground text-center">Ao se cadastrar você concorda com os termos da plataforma Loor.</p>
     </form>
   );

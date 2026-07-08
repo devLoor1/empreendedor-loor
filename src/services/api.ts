@@ -93,6 +93,13 @@ export async function changePassword(token: string, password: string, password_c
   });
 }
 
+export async function confirmRegister(token: string) {
+  return apiFetch('/confirm-register', {
+    method: 'PUT',
+    body: JSON.stringify({ token }),
+  });
+}
+
 export async function getMe() {
   return apiFetch('/auth/entrepreneur/me');
 }

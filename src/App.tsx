@@ -4,6 +4,7 @@ import { isAuthenticated } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import AuthPage from "@/pages/auth";
 import ChangePasswordPage from "@/pages/change-password";
+import VerificationEmailPage from "@/pages/verification-email";
 import Dashboard from "@/pages/dashboard";
 import CompanyPage from "@/pages/perfil-empresa";
 import PersonalPage from "@/pages/perfil-pessoal";
@@ -28,6 +29,8 @@ export default function App() {
         <Route path="/" element={<RootRedirect />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/entrepreneur/change-password/:token" element={<ChangePasswordPage />} />
+        <Route path="/verification-email" element={<VerificationEmailPage />} />
+        <Route path="/verification-email/:token" element={<VerificationEmailPage />} />
         <Route
           path="/app"
           element={
