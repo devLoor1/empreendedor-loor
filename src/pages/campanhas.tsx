@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CampaignCreateButton } from "@/components/campaign-launch-guard";
 import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone } from "lucide-react";
 import {
   getActiveOpportunities,
@@ -77,6 +78,7 @@ export default function CampaignsPage() {
           <h1 className="text-3xl font-bold text-foreground">Campanhas</h1>
           <p className="text-muted-foreground mt-1">Gerencie e acompanhe todas as suas campanhas de captação.</p>
         </div>
+        <CampaignCreateButton />
       </header>
 
       {active.length > 0 && (

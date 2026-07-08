@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CampaignCreateButton } from "@/components/campaign-launch-guard";
 import { Building2, FileCheck2, Megaphone, TrendingUp, Users, BarChart3 } from "lucide-react";
 
 type Opportunity = {
@@ -69,11 +70,14 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-8 max-w-6xl">
-      <header>
-        <h1 className="text-3xl font-bold text-foreground">
-          Olá, {user?.full_name?.split(" ")[0] ?? "Empreendedor"} 👋
-        </h1>
-        <p className="text-muted-foreground mt-1">Aqui está o panorama da sua jornada de captação.</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">
+            Olá, {user?.full_name?.split(" ")[0] ?? "Empreendedor"} 👋
+          </h1>
+          <p className="text-muted-foreground mt-1">Aqui está o panorama da sua jornada de captação.</p>
+        </div>
+        <CampaignCreateButton />
       </header>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

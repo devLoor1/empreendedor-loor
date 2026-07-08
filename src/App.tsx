@@ -10,6 +10,7 @@ import CompanyPage from "@/pages/perfil-empresa";
 import PersonalPage from "@/pages/perfil-pessoal";
 import DocsPage from "@/pages/documentos";
 import CampaignsPage from "@/pages/campanhas";
+import CampaignCreatePage from "@/pages/campanha-nova";
 import CampaignDetail from "@/pages/campanha-detalhe";
 import CampaignDebtPage from "@/pages/campanha-divida";
 
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="perfil-pessoal" element={<PersonalPage />} />
           <Route path="documentos" element={<DocsPage />} />
           <Route path="campanhas" element={<CampaignsPage />} />
+          <Route path="campanhas/nova" element={<CampaignCreatePage />} />
           <Route path="campanhas/:id" element={<CampaignDetail />} />
           <Route path="campanhas/:id/divida" element={<CampaignDebtPage />} />
         </Route>
