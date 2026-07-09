@@ -30,6 +30,34 @@ type ApiValidationError = {
   message?: string;
 };
 
+const GENDER_VALUE_MAP: Record<string, string> = {
+  masculino: "male",
+  feminino: "female",
+  outro: "another",
+  male: "male",
+  female: "female",
+  another: "another",
+};
+
+const MARITAL_STATUS_VALUE_MAP: Record<string, string> = {
+  solteiro: "single",
+  casado: "married",
+  divorciado: "divorced",
+  viuvo: "widower-widow",
+  single: "single",
+  married: "married",
+  divorced: "divorced",
+  "widower-widow": "widower-widow",
+};
+
+function normalizeGender(value: unknown) {
+  return typeof value === "string" ? GENDER_VALUE_MAP[value] ?? value : "";
+}
+
+function normalizeMaritalStatus(value: unknown) {
+  return typeof value === "string" ? MARITAL_STATUS_VALUE_MAP[value] ?? "" : "";
+}
+
 function getPersonalProfileErrorMessage(error: unknown) {
   const fallback = "Erro ao salvar perfil pessoal";
 
@@ -51,6 +79,13 @@ function getPersonalProfileErrorMessage(error: unknown) {
     return "Selecione uma opção de gênero.";
   }
 
+  if (
+    normalizedField === "marital_status" ||
+    normalizedMessage.includes("validator.shared.marital_status")
+  ) {
+    return "Selecione uma opção de estado civil.";
+  }
+
   return rawMessage || fallback;
 }
 
@@ -68,11 +103,11 @@ export default function PersonalPage() {
           setData({
             full_name: d.full_name ?? "",
             phone: d.phone ?? "",
-            gender: d.gender ?? "",
+            gender: normalizeGender(d.gender),
             cpf: d.cpf ?? "",
             rg: d.rg ?? "",
             issuing_entity: d.issuing_entity ?? "",
-            marital_status: d.marital_status ?? "",
+            marital_status: normalizeMaritalStatus(d.marital_status),
             birth_date: d.birth_date ? String(d.birth_date).slice(0, 10) : "",
           });
           if (d.cpf) setSaved(true);
@@ -149,9 +184,9 @@ export default function PersonalPage() {
             <Select value={data.gender} onValueChange={(v) => upd({ gender: v })}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="masculino">Masculino</SelectItem>
-                <SelectItem value="feminino">Feminino</SelectItem>
-                <SelectItem value="outro">Outro</SelectItem>
+                <SelectItem value="male">Masculino</SelectItem>
+                <SelectItem value="female">Feminino</SelectItem>
+                <SelectItem value="another">Outro</SelectItem>
               </SelectContent>
             </Select>
           </Field>
@@ -159,11 +194,10 @@ export default function PersonalPage() {
             <Select value={data.marital_status} onValueChange={(v) => upd({ marital_status: v })}>
               <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="solteiro">Solteiro(a)</SelectItem>
-                <SelectItem value="casado">Casado(a)</SelectItem>
-                <SelectItem value="divorciado">Divorciado(a)</SelectItem>
-                <SelectItem value="viuvo">Viúvo(a)</SelectItem>
-                <SelectItem value="uniao_estavel">União estável</SelectItem>
+                <SelectItem value="single">Solteiro(a)</SelectItem>
+                <SelectItem value="married">Casado(a)</SelectItem>
+                <SelectItem value="divorced">Divorciado(a)</SelectItem>
+                <SelectItem value="widower-widow">Viúvo(a)</SelectItem>
               </SelectContent>
             </Select>
           </Field>
