@@ -25,6 +25,35 @@ const EMPTY: PersonalForm = {
   full_name: "", phone: "", gender: "", cpf: "", rg: "", issuing_entity: "", marital_status: "", birth_date: "",
 };
 
+type ApiValidationError = {
+  errors?: Array<{ field?: string; message?: string }>;
+  message?: string;
+};
+
+function getPersonalProfileErrorMessage(error: unknown) {
+  const fallback = "Erro ao salvar perfil pessoal";
+
+  if (!error || typeof error !== "object") {
+    return fallback;
+  }
+
+  const apiError = error as ApiValidationError;
+  const firstError = apiError.errors?.[0];
+  const rawMessage = firstError?.message || apiError.message || "";
+  const normalizedMessage = rawMessage.toLowerCase();
+  const normalizedField = firstError?.field?.toLowerCase();
+
+  if (
+    normalizedField === "gender" ||
+    normalizedMessage.includes("validator.shared.gender") ||
+    (normalizedMessage.includes("translation missing") && normalizedMessage.includes("gender"))
+  ) {
+    return "Selecione uma opção de gênero.";
+  }
+
+  return rawMessage || fallback;
+}
+
 export default function PersonalPage() {
   const [data, setData] = useState<PersonalForm>(EMPTY);
   const [saved, setSaved] = useState(false);
@@ -66,9 +95,8 @@ export default function PersonalPage() {
       await updatePersonalInformation(data);
       setSaved(true);
       toast.success("Perfil pessoal salvo com sucesso!");
-    } catch (err: any) {
-      const msg = err?.errors?.[0]?.message || err?.message || "Erro ao salvar perfil pessoal";
-      toast.error(msg);
+    } catch (err: unknown) {
+      toast.error(getPersonalProfileErrorMessage(err));
     } finally {
       setSaving(false);
     }
