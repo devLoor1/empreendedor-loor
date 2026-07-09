@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -15,6 +15,7 @@ import {
   FileText,
   Image,
   Landmark,
+  Loader2,
   LockKeyhole,
   MapPin,
   Megaphone,
@@ -47,6 +48,14 @@ import {
 } from "@/components/campaign-launch-guard";
 import { cn } from "@/lib/utils";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
+import {
+  createOpportunity,
+  getBanks,
+  getSegments,
+  getWarranties,
+  uploadImage,
+} from "@/services/api";
+import { toast } from "sonner";
 
 type CampaignModality = "debt" | "equity";
 type DocumentType = "cnpj" | "cpf";
@@ -61,12 +70,19 @@ type WizardStep =
   | "media"
   | "review";
 
+type ReferenceOption = {
+  id: number;
+  name: string;
+};
+
 type CampaignDraft = {
   modality: CampaignModality | null;
   opportunityName: string;
-  documentType: DocumentType;
   documentNumber: string;
+  responsibleCpf: string;
+  speCnpj: string;
   segment: string;
+  resourceUtilization: string;
   shortDescription: string;
   longDescription: string;
   videoUrl: string;
@@ -85,9 +101,11 @@ type CampaignDraft = {
   district: string;
   street: string;
   number: string;
+  warrantyId: string;
   bankName: string;
   agency: string;
   account: string;
+  accountDigit: string;
   pixType: string;
   pixKey: string;
   privacy: PrivacyMode;
@@ -96,7 +114,9 @@ type CampaignDraft = {
   cardSubtitle: string;
   cardLongText: string;
   heroImageNote: string;
+  heroImageFile: File | null;
   galleryNotes: string;
+  extraImageFiles: File[];
   extraVideoUrl: string;
   safeReviewAccepted: boolean;
 };
@@ -111,9 +131,11 @@ type StepConfig = {
 const INITIAL_DRAFT: CampaignDraft = {
   modality: null,
   opportunityName: "",
-  documentType: "cnpj",
   documentNumber: "",
+  responsibleCpf: "",
+  speCnpj: "",
   segment: "",
+  resourceUtilization: "",
   shortDescription: "",
   longDescription: "",
   videoUrl: "",
@@ -132,9 +154,11 @@ const INITIAL_DRAFT: CampaignDraft = {
   district: "",
   street: "",
   number: "",
+  warrantyId: "",
   bankName: "",
   agency: "",
   account: "",
+  accountDigit: "",
   pixType: "cpf",
   pixKey: "",
   privacy: "public",
@@ -143,7 +167,9 @@ const INITIAL_DRAFT: CampaignDraft = {
   cardSubtitle: "",
   cardLongText: "",
   heroImageNote: "",
+  heroImageFile: null,
   galleryNotes: "",
+  extraImageFiles: [],
   extraVideoUrl: "",
   safeReviewAccepted: false,
 };
@@ -199,27 +225,31 @@ const WIZARD_STEPS: StepConfig[] = [
   },
 ];
 
-const SEGMENT_OPTIONS = [
-  "Agronegócio",
-  "Energia",
-  "Imobiliário",
-  "Tecnologia",
-  "Saúde",
-  "Varejo",
-  "Serviços",
-  "Outro",
-];
-
 const FREQUENCY_OPTIONS = [
-  "Mensal",
-  "Bimestral",
-  "Trimestral",
-  "Semestral",
-  "Anual",
-  "No vencimento",
+  { label: "Mensal", value: "mensal" },
+  { label: "Bimestral", value: "bimestral" },
+  { label: "Trimestral", value: "trimestral" },
+  { label: "Semestral", value: "semestral" },
+  { label: "Anual", value: "anual" },
+  { label: "Única", value: "unica" },
 ];
 
-const PIX_TYPES = ["CPF", "CNPJ", "Telefone", "E-mail", "Chave aleatória"];
+const PIX_TYPES = [
+  { label: "CPF", value: "cpf" },
+  { label: "CNPJ", value: "cnpj" },
+  { label: "Telefone", value: "phone" },
+  { label: "E-mail", value: "email" },
+  { label: "Chave aleatória", value: "random" },
+];
+
+const RESOURCE_UTILIZATION_OPTIONS = [
+  { label: "Capital de giro", value: "working_capital" },
+  { label: "Refinanciamento de dívida", value: "debt_refinancing" },
+  { label: "Investimento na oportunidade", value: "investment_in_the_opportunity" },
+];
+
+const IMAGE_MAX_SIZE = 2 * 1024 * 1024;
+const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png"];
 
 const MODALITY_OPTIONS: Array<{
   id: CampaignModality;
@@ -269,6 +299,22 @@ function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
 }
 
+function getDataArray(response: unknown): ReferenceOption[] {
+  if (!response || typeof response !== "object") return [];
+
+  const data = (response as { data?: unknown }).data;
+
+  return Array.isArray(data) ? (data as ReferenceOption[]) : [];
+}
+
+function getResponseData(response: unknown): Record<string, unknown> | null {
+  if (!response || typeof response !== "object") return null;
+
+  const data = (response as { data?: unknown }).data ?? response;
+
+  return data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+}
+
 function fieldHasText(value: string, minLength = 1) {
   return value.trim().length >= minLength;
 }
@@ -277,6 +323,12 @@ function toPositiveNumber(value: string) {
   const normalized = value.replace(/\./g, "").replace(",", ".");
   const numeric = Number.parseFloat(normalized);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function toInteger(value: string) {
+  const numeric = Number.parseInt(onlyDigits(value), 10);
+
+  return Number.isFinite(numeric) ? numeric : 0;
 }
 
 function formatCurrency(value: number) {
@@ -300,14 +352,12 @@ function formatDocument(value: string, type: DocumentType) {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
-function formatPhone(value: string) {
-  const digits = onlyDigits(value).slice(0, 11);
+function formatCnpj(value: string) {
+  return formatDocument(value, "cnpj");
+}
 
-  if (digits.length <= 10) {
-    return digits.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
-  }
-
-  return digits.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+function formatCpf(value: string) {
+  return formatDocument(value, "cpf");
 }
 
 function formatZipCode(value: string) {
@@ -318,6 +368,82 @@ function formatZipCode(value: string) {
 
 function isValidDocument(value: string, type: DocumentType) {
   return onlyDigits(value).length === (type === "cnpj" ? 14 : 11);
+}
+
+function normalizeImageFilename(file: File) {
+  const dotIndex = file.name.lastIndexOf(".");
+
+  if (dotIndex <= 0) return file;
+
+  const base = file.name.slice(0, dotIndex);
+  const extension = file.name.slice(dotIndex + 1).toLowerCase();
+  const normalizedName = `${base}.${extension}`;
+
+  if (normalizedName === file.name) return file;
+
+  return new File([file], normalizedName, { type: file.type, lastModified: file.lastModified });
+}
+
+function validateImage(file: File) {
+  const normalized = normalizeImageFilename(file);
+  const extension = normalized.name.split(".").pop()?.toLowerCase() || "";
+
+  if (!IMAGE_EXTENSIONS.includes(extension)) {
+    return { file: null, error: "Use uma imagem PNG, JPG ou JPEG." };
+  }
+
+  if (normalized.size > IMAGE_MAX_SIZE) {
+    return { file: null, error: "A imagem deve ter até 2 MB." };
+  }
+
+  return { file: normalized, error: null };
+}
+
+async function uploadCampaignImage(file: File, folder: "opportunities/banner" | "opportunities/extra_images") {
+  const formData = new FormData();
+  formData.append("image", normalizeImageFilename(file));
+  formData.append("folder", folder);
+
+  const response = await uploadImage(formData);
+  const data = getResponseData(response);
+  const id = Number(data?.id);
+
+  if (!Number.isFinite(id) || id <= 0) {
+    throw new Error("Upload de imagem não retornou identificador válido.");
+  }
+
+  return id;
+}
+
+function normalizePixKey(type: string, value: string) {
+  const trimmed = value.trim();
+
+  if (type === "cpf" || type === "cnpj") return onlyDigits(trimmed);
+  if (type === "phone") {
+    const digits = onlyDigits(trimmed);
+    return digits.startsWith("55") ? `+${digits}` : `+55${digits}`;
+  }
+  if (type === "email") return trimmed.toLowerCase();
+
+  return trimmed.toLowerCase();
+}
+
+function isValidPix(type: string, value: string) {
+  const key = normalizePixKey(type, value);
+
+  if (type === "cpf") return /^\d{11}$/.test(key);
+  if (type === "cnpj") return /^\d{14}$/.test(key);
+  if (type === "phone") return /^\+55\d{2}\d{9}$/.test(key);
+  if (type === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key);
+  if (type === "random") {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(key);
+  }
+
+  return false;
+}
+
+function getOptionName(options: ReferenceOption[], id: string) {
+  return options.find((option) => String(option.id) === id)?.name || "Não informado";
 }
 
 function getStepIndex(step: WizardStep) {
@@ -333,10 +459,17 @@ function getQuotaCount(targetAmount: string, shareValue: string) {
 }
 
 function getDraftValidation(draft: CampaignDraft) {
+  const target = toPositiveNumber(draft.targetAmount);
+  const share = toPositiveNumber(draft.shareValue);
+  const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
   const basicsValid =
     fieldHasText(draft.opportunityName, 3) &&
-    isValidDocument(draft.documentNumber, draft.documentType) &&
+    isValidDocument(draft.documentNumber, "cnpj") &&
+    isValidDocument(draft.responsibleCpf, "cpf") &&
+    isValidDocument(draft.speCnpj, "cnpj") &&
     fieldHasText(draft.segment) &&
+    fieldHasText(draft.resourceUtilization) &&
+    draft.whatsapp.trim().startsWith("https://chat.whatsapp.com/") &&
     fieldHasText(draft.shortDescription, 20) &&
     fieldHasText(draft.longDescription, 80);
 
@@ -352,9 +485,11 @@ function getDraftValidation(draft: CampaignDraft) {
     toPositiveNumber(draft.equityPercentage) <= 100;
 
   const targetValid =
-    toPositiveNumber(draft.targetAmount) > 0 &&
-    toPositiveNumber(draft.shareValue) > 0 &&
-    getQuotaCount(draft.targetAmount, draft.shareValue) > 0;
+    target >= 100 &&
+    share >= 100 &&
+    quotaCount > 0 &&
+    quotaCount <= 9999 &&
+    target % share === 0;
 
   const operationsValid =
     fieldHasText(draft.teamMembers, 10) &&
@@ -365,16 +500,19 @@ function getDraftValidation(draft: CampaignDraft) {
     fieldHasText(draft.number);
 
   const bankingValid =
-    fieldHasText(draft.bankName, 2) &&
-    fieldHasText(draft.agency, 2) &&
-    fieldHasText(draft.account, 2) &&
-    fieldHasText(draft.pixKey, 4) &&
+    fieldHasText(draft.bankName) &&
+    onlyDigits(draft.agency).length === 4 &&
+    onlyDigits(draft.account).length >= 5 &&
+    onlyDigits(draft.account).length <= 16 &&
+    onlyDigits(draft.accountDigit).length === 1 &&
+    isValidPix(draft.pixType, draft.pixKey) &&
     (draft.privacy === "public" || fieldHasText(draft.allowedCpfs, 11));
 
   const mediaValid =
     fieldHasText(draft.cardTitle, 5) &&
     fieldHasText(draft.cardSubtitle, 20) &&
-    fieldHasText(draft.cardLongText, 80);
+    fieldHasText(draft.cardLongText, 80) &&
+    draft.heroImageFile !== null;
 
   return {
     modality: draft.modality !== null,
@@ -492,7 +630,7 @@ function ModalityStep({
       <CardHeader>
         <div className="flex items-center gap-2">
           <Badge variant="secondary">Etapa 1</Badge>
-          <Badge variant="outline">Sem envio</Badge>
+          <Badge variant="outline">Envio final</Badge>
         </div>
         <CardTitle>Modalidade da campanha</CardTitle>
         <CardDescription>
@@ -560,24 +698,21 @@ function ModalityStep({
 
 function BasicsStep({
   draft,
+  segments,
+  referencesLoading,
   onPatch,
   canContinue,
   onBack,
   onContinue,
 }: {
   draft: CampaignDraft;
+  segments: ReferenceOption[];
+  referencesLoading: boolean;
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canContinue: boolean;
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const handleDocumentTypeChange = (type: DocumentType) => {
-    onPatch({
-      documentType: type,
-      documentNumber: formatDocument(draft.documentNumber, type),
-    });
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -586,7 +721,7 @@ function BasicsStep({
         </Badge>
         <CardTitle>Dados básicos da oportunidade</CardTitle>
         <CardDescription>
-          Estruture os dados visuais principais. Nada será salvo neste ciclo.
+          Estruture os dados exigidos pelo contrato de criação da oportunidade.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -603,12 +738,12 @@ function BasicsStep({
           <FormField id="segment" label="Segmento">
             <Select value={draft.segment} onValueChange={(segment) => onPatch({ segment })}>
               <SelectTrigger id="segment">
-                <SelectValue placeholder="Selecione o segmento" />
+                <SelectValue placeholder={referencesLoading ? "Carregando..." : "Selecione o segmento"} />
               </SelectTrigger>
               <SelectContent>
-                {SEGMENT_OPTIONS.map((segment) => (
-                  <SelectItem key={segment} value={segment}>
-                    {segment}
+                {segments.map((segment) => (
+                  <SelectItem key={segment.id} value={String(segment.id)}>
+                    {segment.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -616,36 +751,55 @@ function BasicsStep({
           </FormField>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[180px_1fr]">
-          <FormField id="documentType" label="Documento visual">
-            <Select value={draft.documentType} onValueChange={handleDocumentTypeChange}>
-              <SelectTrigger id="documentType">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cnpj">CNPJ</SelectItem>
-                <SelectItem value="cpf">CPF</SelectItem>
-              </SelectContent>
-            </Select>
-          </FormField>
-
-          <FormField
-            id="documentNumber"
-            label={draft.documentType === "cnpj" ? "CNPJ" : "CPF"}
-            hint="Use apenas dado sintético ou autorizado. A validação é visual por quantidade de dígitos."
-          >
+        <div className="grid gap-4 md:grid-cols-3">
+          <FormField id="documentNumber" label="CNPJ da empresa">
             <Input
               id="documentNumber"
               value={draft.documentNumber}
-              onChange={(event) =>
-                onPatch({
-                  documentNumber: formatDocument(event.target.value, draft.documentType),
-                })
-              }
-              placeholder={draft.documentType === "cnpj" ? "00.000.000/0000-00" : "000.000.000-00"}
+              onChange={(event) => onPatch({ documentNumber: formatCnpj(event.target.value) })}
+              placeholder="00.000.000/0000-00"
+              inputMode="numeric"
+            />
+          </FormField>
+
+          <FormField id="responsibleCpf" label="CPF do responsável">
+            <Input
+              id="responsibleCpf"
+              value={draft.responsibleCpf}
+              onChange={(event) => onPatch({ responsibleCpf: formatCpf(event.target.value) })}
+              placeholder="000.000.000-00"
+              inputMode="numeric"
+            />
+          </FormField>
+
+          <FormField id="speCnpj" label="CNPJ da SPE">
+            <Input
+              id="speCnpj"
+              value={draft.speCnpj}
+              onChange={(event) => onPatch({ speCnpj: formatCnpj(event.target.value) })}
+              placeholder="00.000.000/0000-00"
+              inputMode="numeric"
             />
           </FormField>
         </div>
+
+        <FormField id="resourceUtilization" label="Uso dos recursos">
+          <Select
+            value={draft.resourceUtilization}
+            onValueChange={(resourceUtilization) => onPatch({ resourceUtilization })}
+          >
+            <SelectTrigger id="resourceUtilization">
+              <SelectValue placeholder="Selecione a finalidade" />
+            </SelectTrigger>
+            <SelectContent>
+              {RESOURCE_UTILIZATION_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FormField>
 
         <FormField
           id="shortDescription"
@@ -686,14 +840,14 @@ function BasicsStep({
 
           <FormField
             id="whatsapp"
-            label="WhatsApp opcional"
-            hint="Campo visual, não dispara contato."
+            label="Grupo de WhatsApp da oportunidade"
+            hint="O backend exige um link iniciado por https://chat.whatsapp.com/."
           >
             <Input
               id="whatsapp"
               value={draft.whatsapp}
-              onChange={(event) => onPatch({ whatsapp: formatPhone(event.target.value) })}
-              placeholder="(00) 00000-0000"
+              onChange={(event) => onPatch({ whatsapp: event.target.value })}
+              placeholder="https://chat.whatsapp.com/..."
             />
           </FormField>
         </div>
@@ -731,7 +885,7 @@ function FinancialStep({
         </div>
         <CardTitle>Dados financeiros condicionais</CardTitle>
         <CardDescription>
-          Os campos mudam conforme a modalidade escolhida, ainda sem contrato de envio.
+          Os campos mudam conforme a modalidade escolhida e seguem os enums do backend.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -769,8 +923,8 @@ function FinancialStep({
                 </SelectTrigger>
                 <SelectContent>
                   {FREQUENCY_OPTIONS.map((frequency) => (
-                    <SelectItem key={frequency} value={frequency}>
-                      {frequency}
+                    <SelectItem key={frequency.value} value={frequency.value}>
+                      {frequency.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -894,12 +1048,14 @@ function TargetStep({
 
 function OperationsStep({
   draft,
+  warranties,
   onPatch,
   canContinue,
   onBack,
   onContinue,
 }: {
   draft: CampaignDraft;
+  warranties: ReferenceOption[];
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canContinue: boolean;
   onBack: () => void;
@@ -924,6 +1080,26 @@ function OperationsStep({
             onChange={(event) => onPatch({ guarantees: event.target.value })}
             placeholder="Descreva garantias, mitigadores de risco ou deixe em branco."
           />
+        </FormField>
+
+        <FormField
+          id="warrantyId"
+          label="Garantia cadastrada"
+          hint="Opcional. A seleção usa os IDs retornados por GET /entrepreneurs/warranties."
+        >
+          <Select value={draft.warrantyId || "none"} onValueChange={(value) => onPatch({ warrantyId: value === "none" ? "" : value })}>
+            <SelectTrigger id="warrantyId">
+              <SelectValue placeholder="Sem garantia vinculada" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem garantia vinculada</SelectItem>
+              {warranties.map((warranty) => (
+                <SelectItem key={warranty.id} value={String(warranty.id)}>
+                  {warranty.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </FormField>
 
         <FormField
@@ -1006,12 +1182,14 @@ function OperationsStep({
 
 function BankingStep({
   draft,
+  banks,
   onPatch,
   canContinue,
   onBack,
   onContinue,
 }: {
   draft: CampaignDraft;
+  banks: ReferenceOption[];
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canContinue: boolean;
   onBack: () => void;
@@ -1029,29 +1207,46 @@ function BankingStep({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <FormField id="bankName" label="Banco">
-            <Input
-              id="bankName"
-              value={draft.bankName}
-              onChange={(event) => onPatch({ bankName: event.target.value })}
-              placeholder="Banco de teste"
-            />
+            <Select value={draft.bankName} onValueChange={(bankName) => onPatch({ bankName })}>
+              <SelectTrigger id="bankName">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {banks.map((bank) => (
+                  <SelectItem key={bank.id} value={String(bank.id)}>
+                    {bank.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FormField>
           <FormField id="agency" label="Agência">
             <Input
               id="agency"
               value={draft.agency}
-              onChange={(event) => onPatch({ agency: event.target.value })}
+              onChange={(event) => onPatch({ agency: onlyDigits(event.target.value).slice(0, 4) })}
               placeholder="0001"
+              inputMode="numeric"
             />
           </FormField>
           <FormField id="account" label="Conta">
             <Input
               id="account"
               value={draft.account}
-              onChange={(event) => onPatch({ account: event.target.value })}
-              placeholder="000000-0"
+              onChange={(event) => onPatch({ account: onlyDigits(event.target.value).slice(0, 16) })}
+              placeholder="000000"
+              inputMode="numeric"
+            />
+          </FormField>
+          <FormField id="accountDigit" label="Dígito">
+            <Input
+              id="accountDigit"
+              value={draft.accountDigit}
+              onChange={(event) => onPatch({ accountDigit: onlyDigits(event.target.value).slice(0, 1) })}
+              placeholder="0"
+              inputMode="numeric"
             />
           </FormField>
         </div>
@@ -1064,8 +1259,8 @@ function BankingStep({
               </SelectTrigger>
               <SelectContent>
                 {PIX_TYPES.map((type) => (
-                  <SelectItem key={type} value={type.toLowerCase()}>
-                    {type}
+                  <SelectItem key={type.value} value={type.value}>
+                    {type.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1158,6 +1353,44 @@ function MediaStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const handleHeroImage = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    const result = validateImage(file);
+
+    if (!result.file) {
+      toast.error(result.error);
+      return;
+    }
+
+    onPatch({ heroImageFile: result.file });
+  };
+
+  const handleExtraImages = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (files.length === 0) return;
+
+    const accepted: File[] = [];
+
+    for (const file of files.slice(0, 3)) {
+      const result = validateImage(file);
+
+      if (!result.file) {
+        toast.error(`${file.name}: ${result.error}`);
+        continue;
+      }
+
+      accepted.push(result.file);
+    }
+
+    onPatch({ extraImageFiles: accepted });
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -1166,7 +1399,7 @@ function MediaStep({
         </Badge>
         <CardTitle>Card, textos e mídia</CardTitle>
         <CardDescription>
-          Monte a apresentação visual da campanha sem upload real de arquivos.
+          Monte a apresentação da campanha. A imagem principal será enviada antes da criação.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1182,8 +1415,8 @@ function MediaStep({
 
           <FormField
             id="heroImageNote"
-            label="Imagem principal"
-            hint="Referência textual, sem upload."
+            label="Descrição da imagem principal"
+            hint="A descrição ajuda na revisão visual; o arquivo abaixo será enviado para gerar image_id."
           >
             <Input
               id="heroImageNote"
@@ -1193,6 +1426,19 @@ function MediaStep({
             />
           </FormField>
         </div>
+
+        <FormField
+          id="heroImageFile"
+          label="Arquivo da imagem principal"
+          hint="Obrigatório para criar a oportunidade. PNG/JPG até 2 MB; extensão final normalizada para lowercase."
+        >
+          <Input id="heroImageFile" type="file" accept=".png,.jpg,.jpeg" onChange={handleHeroImage} />
+          {draft.heroImageFile && (
+            <p className="text-xs text-muted-foreground">
+              Selecionado: {draft.heroImageFile.name}
+            </p>
+          )}
+        </FormField>
 
         <FormField
           id="cardSubtitle"
@@ -1224,8 +1470,8 @@ function MediaStep({
         <div className="grid gap-4 md:grid-cols-2">
           <FormField
             id="galleryNotes"
-            label="Imagens extras"
-            hint="Referências textuais, sem upload."
+            label="Observações das imagens extras"
+            hint="Opcional. Até três arquivos extras podem ser enviados abaixo."
           >
             <Textarea
               id="galleryNotes"
@@ -1233,6 +1479,25 @@ function MediaStep({
               onChange={(event) => onPatch({ galleryNotes: event.target.value })}
               placeholder="Ex.: operação, equipe, documentos, localização."
             />
+          </FormField>
+
+          <FormField
+            id="extraImageFiles"
+            label="Imagens extras"
+            hint="Opcional. PNG/JPG até 2 MB cada."
+          >
+            <Input
+              id="extraImageFiles"
+              type="file"
+              accept=".png,.jpg,.jpeg"
+              multiple
+              onChange={handleExtraImages}
+            />
+            {draft.extraImageFiles.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {draft.extraImageFiles.length} imagem(ns) extra(s) selecionada(s).
+              </p>
+            )}
           </FormField>
 
           <FormField id="extraVideoUrl" label="Vídeo complementar">
@@ -1258,14 +1523,24 @@ function MediaStep({
 
 function ReviewStep({
   draft,
+  segments,
+  banks,
   onPatch,
   canFinish,
   onBack,
+  onSubmit,
+  submitting,
+  createdOpportunityId,
 }: {
   draft: CampaignDraft;
+  segments: ReferenceOption[];
+  banks: ReferenceOption[];
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canFinish: boolean;
   onBack: () => void;
+  onSubmit: () => void;
+  submitting: boolean;
+  createdOpportunityId: number | null;
 }) {
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
 
@@ -1277,18 +1552,29 @@ function ReviewStep({
         </Badge>
         <CardTitle>Revisão final visual</CardTitle>
         <CardDescription>
-          Confirme o rascunho local. O envio real permanece desabilitado até validação de contrato.
+          Confirme o rascunho. Esta etapa cria uma oportunidade persistente no backend.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Alert>
-          <LockKeyhole className="h-4 w-4" />
-          <AlertTitle>Envio real bloqueado</AlertTitle>
+        <Alert variant="destructive">
+          <CircleAlert className="h-4 w-4" />
+          <AlertTitle>Ação persistente</AlertTitle>
           <AlertDescription>
-            Esta tela não cria oportunidade. O botão final fica em modo seguro porque a integração
-            de persistência e os contratos finais ainda não foram aprovados neste ciclo.
+            Ao confirmar, o frontend enviará imagens e criará uma oportunidade real para a conta QA
+            autenticada. Não use dados reais de cliente neste teste.
           </AlertDescription>
         </Alert>
+
+        {createdOpportunityId && (
+          <Alert>
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Oportunidade criada</AlertTitle>
+            <AlertDescription>
+              O backend retornou o identificador {createdOpportunityId}. Revise a listagem de
+              campanhas para acompanhar o status.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <SummaryCard title="Identificação" icon={Building2}>
@@ -1297,7 +1583,7 @@ function ReviewStep({
               label="Modalidade"
               value={draft.modality ? modalityLabel[draft.modality] : "-"}
             />
-            <SummaryItem label="Segmento" value={draft.segment || "Não informado"} />
+            <SummaryItem label="Segmento" value={getOptionName(segments, draft.segment)} />
           </SummaryCard>
 
           <SummaryCard title="Financeiro" icon={Landmark}>
@@ -1336,7 +1622,7 @@ function ReviewStep({
           </SummaryCard>
 
           <SummaryCard title="Conta e exposição" icon={CreditCard}>
-            <SummaryItem label="Banco" value={draft.bankName || "Não informado"} />
+            <SummaryItem label="Banco" value={getOptionName(banks, draft.bankName)} />
             <SummaryItem
               label="Pix visual"
               value={fieldHasText(draft.pixKey) ? "Informado" : "Pendente"}
@@ -1377,11 +1663,11 @@ function ReviewStep({
           </div>
           <div>
             <p className="font-semibold text-foreground">
-              Confirmo que esta revisão é apenas visual
+              Confirmo que quero criar esta oportunidade
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Nenhuma campanha será criada, enviada, aprovada ou publicada por esta tela neste
-              ciclo.
+              Entendo que esta ação envia imagens e cria um registro persistente no backend para a
+              conta QA autenticada.
             </p>
           </div>
         </button>
@@ -1393,11 +1679,18 @@ function ReviewStep({
           <div className="flex flex-col items-start gap-2 sm:items-end">
             <p className="text-sm text-muted-foreground">
               {canFinish
-                ? "Revisão visual confirmada. Envio real permanece bloqueado."
-                : "Confirme o modo visual para concluir a revisão local."}
+                ? "Pronto para criar oportunidade persistente."
+                : "Confirme a ação persistente para liberar o envio."}
             </p>
-            <Button type="button" disabled>
-              Solicitar análise bloqueado neste ciclo
+            <Button type="button" onClick={onSubmit} disabled={!canFinish || submitting || !!createdOpportunityId}>
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                "Criar oportunidade"
+              )}
             </Button>
           </div>
         </div>
@@ -1446,8 +1739,56 @@ export default function CampaignCreatePage() {
   const [previewWizard, setPreviewWizard] = useState(false);
   const [currentStep, setCurrentStep] = useState<WizardStep>("modality");
   const [draft, setDraft] = useState<CampaignDraft>(INITIAL_DRAFT);
+  const [segments, setSegments] = useState<ReferenceOption[]>([]);
+  const [banks, setBanks] = useState<ReferenceOption[]>([]);
+  const [warranties, setWarranties] = useState<ReferenceOption[]>([]);
+  const [referencesLoading, setReferencesLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
   const validation = useMemo(() => getDraftValidation(draft), [draft]);
   const showWizard = canStart || previewWizard;
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadReferences() {
+      const [segmentsResult, banksResult, warrantiesResult] = await Promise.allSettled([
+        getSegments(),
+        getBanks(),
+        getWarranties(),
+      ]);
+
+      if (!active) return;
+
+      if (segmentsResult.status === "fulfilled") {
+        setSegments(getDataArray(segmentsResult.value));
+      }
+
+      if (banksResult.status === "fulfilled") {
+        setBanks(getDataArray(banksResult.value));
+      }
+
+      if (warrantiesResult.status === "fulfilled") {
+        setWarranties(getDataArray(warrantiesResult.value));
+      }
+
+      if (
+        segmentsResult.status === "rejected" ||
+        banksResult.status === "rejected" ||
+        warrantiesResult.status === "rejected"
+      ) {
+        toast.error("Não foi possível carregar todos os cadastros auxiliares.");
+      }
+
+      setReferencesLoading(false);
+    }
+
+    loadReferences();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const patchDraft = (patch: Partial<CampaignDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
@@ -1479,6 +1820,108 @@ export default function CampaignCreatePage() {
     (field: keyof CampaignDraft) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       patchDraft({ [field]: event.target.value } as Partial<CampaignDraft>);
 
+  const handleSubmit = async () => {
+    if (!draft.heroImageFile) {
+      toast.error("Envie a imagem principal antes de criar a oportunidade.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const imageId = await uploadCampaignImage(draft.heroImageFile, "opportunities/banner");
+      const extraImageIds: number[] = [];
+
+      for (const image of draft.extraImageFiles.slice(0, 3)) {
+        extraImageIds.push(await uploadCampaignImage(image, "opportunities/extra_images"));
+      }
+
+      const warrantyIds = draft.warrantyId ? [Number(draft.warrantyId)] : [];
+      const payload = {
+        is_private: draft.privacy === "private",
+        modality: draft.modality,
+        warranty: warrantyIds.length > 0,
+        address: {
+          country_id: 1,
+          city: draft.city.trim(),
+          complement: null,
+          district: draft.district.trim(),
+          number: draft.number.trim(),
+          state: draft.state.trim().toUpperCase(),
+          street_name: draft.street.trim(),
+          zip_code: onlyDigits(draft.zipCode),
+        },
+        members: [],
+        monetary: {
+          max_goal: toPositiveNumber(draft.targetAmount),
+          min_investment_value: toPositiveNumber(draft.shareValue),
+          warranty_amount: 0,
+        },
+        opportunity: {
+          image_id: imageId,
+          segment_id: Number(draft.segment),
+          about: draft.cardLongText.trim() || draft.longDescription.trim(),
+          business_name: draft.cardTitle.trim() || draft.opportunityName.trim(),
+          company_cnpj: onlyDigits(draft.documentNumber),
+          cpf: onlyDigits(draft.responsibleCpf),
+          whatsapp_group: draft.whatsapp.trim(),
+          promotional_video_url: draft.videoUrl.trim() || draft.extraVideoUrl.trim() || null,
+          description: draft.shortDescription.trim(),
+          name: draft.opportunityName.trim(),
+          resource_utilization: draft.resourceUtilization,
+          spe_cnpj: onlyDigits(draft.speCnpj),
+        },
+        ...(draft.modality === "debt"
+          ? {
+              debt: {
+                percentage_profitability: toPositiveNumber(draft.profitability),
+                payment_frequency: draft.paymentFrequency,
+                grace_period: 0,
+                total_installments: toInteger(draft.installments),
+                single_installment: draft.paymentFrequency === "unica",
+              },
+            }
+          : {
+              equity: {
+                participation: toPositiveNumber(draft.equityPercentage),
+              },
+            }),
+        warranties: warrantyIds,
+        bank_account: {
+          bank_id: Number(draft.bankName),
+          agency: onlyDigits(draft.agency),
+          account: onlyDigits(draft.account),
+          account_digit: onlyDigits(draft.accountDigit),
+        },
+        pix: {
+          type: draft.pixType,
+          key: normalizePixKey(draft.pixType, draft.pixKey),
+        },
+        allowed_cpfs:
+          draft.privacy === "private"
+            ? draft.allowedCpfs
+                .split(/[,\n;]/)
+                .map((value) => onlyDigits(value))
+                .filter(Boolean)
+            : null,
+        extra_images: extraImageIds,
+      };
+
+      const response = await createOpportunity(payload);
+      const id = Number(getResponseData(response)?.id);
+
+      if (Number.isFinite(id) && id > 0) {
+        setCreatedOpportunityId(id);
+      }
+
+      toast.success("Oportunidade criada com sucesso.");
+    } catch {
+      toast.error("Não foi possível criar a oportunidade.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -1496,8 +1939,8 @@ export default function CampaignCreatePage() {
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-foreground">Nova campanha</h1>
             <p className="max-w-3xl text-muted-foreground">
-              Wizard completo de oportunidade em modo seguro, com dados locais, validações visuais e
-              envio real bloqueado.
+              Wizard completo de oportunidade com validações locais, upload de imagens e criação
+              persistente somente no envio final.
             </p>
           </div>
         </div>
@@ -1524,8 +1967,8 @@ export default function CampaignCreatePage() {
               Pré-requisitos
             </CardTitle>
             <CardDescription>
-              A criação real permanece bloqueada quando houver pendências de perfil, documentos,
-              empresa ou contrato.
+              A criação real permanece bloqueada apenas quando houver pendências de perfil pessoal
+              ou endereço da empresa.
             </CardDescription>
           </div>
           {!canStart && !previewWizard && (
@@ -1553,8 +1996,8 @@ export default function CampaignCreatePage() {
               {canStart ? "Wizard liberado visualmente" : "Prévia visual sem envio"}
             </AlertTitle>
             <AlertDescription>
-              Este fluxo não cria campanha, não faz upload, não confirma investimento e não executa
-              chamadas transacionais. Todos os campos ficam apenas no estado local da tela.
+              Não há autosave nem rascunho. Fechar a página descarta os dados locais. A criação
+              persistente acontece apenas no botão final de revisão.
             </AlertDescription>
           </Alert>
 
@@ -1567,6 +2010,8 @@ export default function CampaignCreatePage() {
           {currentStep === "basics" && (
             <BasicsStep
               draft={draft}
+              segments={segments}
+              referencesLoading={referencesLoading}
               onPatch={patchDraft}
               canContinue={validation.basics}
               onBack={goToPreviousStep}
@@ -1597,6 +2042,7 @@ export default function CampaignCreatePage() {
           {currentStep === "operations" && (
             <OperationsStep
               draft={draft}
+              warranties={warranties}
               onPatch={patchDraft}
               canContinue={validation.operations}
               onBack={goToPreviousStep}
@@ -1607,6 +2053,7 @@ export default function CampaignCreatePage() {
           {currentStep === "banking" && (
             <BankingStep
               draft={draft}
+              banks={banks}
               onPatch={patchDraft}
               canContinue={validation.banking}
               onBack={goToPreviousStep}
@@ -1627,9 +2074,14 @@ export default function CampaignCreatePage() {
           {currentStep === "review" && (
             <ReviewStep
               draft={draft}
+              segments={segments}
+              banks={banks}
               onPatch={patchDraft}
               canFinish={validation.review}
               onBack={goToPreviousStep}
+              onSubmit={handleSubmit}
+              submitting={submitting}
+              createdOpportunityId={createdOpportunityId}
             />
           )}
 
