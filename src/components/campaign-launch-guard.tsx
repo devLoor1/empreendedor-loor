@@ -154,7 +154,8 @@ export function CampaignCreationStatusCard() {
         <div className="space-y-1">
           <h2 className="font-semibold text-foreground">Criação segura</h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Esta etapa prepara a campanha, mas não cria oportunidade, Pix, QR Code ou pagamento.
+            A campanha só é persistida no botão final do wizard. Não há autosave, Pix, QR Code ou
+            pagamento nesta etapa.
           </p>
         </div>
       </div>

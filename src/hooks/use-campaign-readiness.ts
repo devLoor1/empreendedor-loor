@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, Building2, FileCheck2, UserRound, type LucideIcon } from "lucide-react";
-import { mockStore } from "@/lib/mock-store";
 import { getAddress, getPersonalInformation } from "@/services/api";
 
 export type CampaignPrerequisiteStatus = "complete" | "pending" | "blocked" | "attention";
@@ -60,8 +59,6 @@ function buildItems(
 ) {
   const personalData = unwrapData(personal);
   const addressData = unwrapData(address);
-  const requiredDocs = mockStore.getDocs().filter((doc) => doc.required);
-  const missingDocs = requiredDocs.filter((doc) => doc.status === "missing");
   const personalComplete = hasRequiredFields(personalData, REQUIRED_PERSONAL_FIELDS);
   const addressComplete = hasRequiredFields(addressData, REQUIRED_ADDRESS_FIELDS);
 
@@ -96,22 +93,20 @@ function buildItems(
       id: "company-contract",
       title: "CNPJ e status da empresa",
       description:
-        "O contrato atual ainda não expõe persistência ou consulta de CNPJ/status operacional para liberar campanhas.",
+        "O CNPJ e o status operacional aparecem como pendentes de validação até existir contrato canônico de empresa, mas não bloqueiam a criação neste ciclo.",
       href: "/app/perfil-empresa",
-      action: "Revisar limitação",
-      status: "blocked",
+      action: "Revisar aviso",
+      status: "attention",
       icon: AlertCircle,
     },
     {
       id: "documents",
       title: "Documentos CVM 88",
       description:
-        missingDocs.length === 0
-          ? "Documentos obrigatórios marcados como enviados neste ambiente."
-          : `${missingDocs.length} documento(s) obrigatório(s) ainda pendente(s).`,
+        "Anexos são opcionais nesta etapa. Eles ajudam a organização do dossiê, mas não bloqueiam cadastro nem campanha.",
       href: "/app/documentos",
-      action: missingDocs.length === 0 ? "Revisar documentos" : "Enviar documentos",
-      status: missingDocs.length === 0 ? "complete" : "pending",
+      action: "Gerenciar documentos",
+      status: "attention",
       icon: FileCheck2,
     },
   ] satisfies CampaignPrerequisite[];

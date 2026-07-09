@@ -7,6 +7,13 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { getAddress, saveAddress } from "@/services/api";
 
@@ -21,15 +28,12 @@ type AddressForm = {
   complement: string;
 };
 
-type CompanyStatus = "unknown" | "active" | "inactive";
-
 type CompanyForm = {
   cnpj: string;
   legal_name: string;
   trade_name: string;
   phone: string;
   email: string;
-  status: CompanyStatus;
 };
 
 type CompanyNotice = {
@@ -55,8 +59,37 @@ const EMPTY_COMPANY: CompanyForm = {
   trade_name: "",
   phone: "",
   email: "",
-  status: "unknown",
 };
+
+const UF_OPTIONS = [
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+];
 
 function onlyDigits(value: string) {
   return value.replace(/\D/g, "");
@@ -80,6 +113,12 @@ function formatPhone(value: string) {
   }
 
   return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+function formatZipCode(value: string) {
+  return onlyDigits(value)
+    .slice(0, 8)
+    .replace(/(\d{5})(\d)/, "$1-$2");
 }
 
 function isValidCnpj(value: string) {
@@ -168,7 +207,6 @@ export default function CompanyPage() {
 
   const cnpjIsFilled = onlyDigits(company.cnpj).length > 0;
   const cnpjIsValid = isValidCnpj(company.cnpj);
-  const companyIsInactive = company.status === "inactive";
 
   useEffect(() => {
     getAddress()
@@ -368,46 +406,24 @@ export default function CompanyPage() {
           <Label className="text-xs text-muted-foreground uppercase tracking-wide">
             Status operacional
           </Label>
-          <div className="grid sm:grid-cols-3 gap-2">
-            <StatusButton
-              active={company.status === "unknown"}
-              label="Não verificada"
-              onClick={() => updCompany({ status: "unknown" })}
-            />
-            <StatusButton
-              active={company.status === "active"}
-              label="Ativa"
-              onClick={() => updCompany({ status: "active" })}
-            />
-            <StatusButton
-              active={company.status === "inactive"}
-              destructive
-              label="Inativa"
-              onClick={() => updCompany({ status: "inactive" })}
-            />
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3">
+            <Badge variant="secondary">Pendente de validação</Badge>
+            <span className="text-sm text-muted-foreground">
+              O status operacional depende de validação canônica da API e não pode ser editado
+              manualmente nesta tela.
+            </span>
           </div>
         </div>
 
-        {companyIsInactive ? (
-          <Alert variant="destructive">
-            <CircleAlert className="h-4 w-4" />
-            <AlertTitle>Empresa inativa</AlertTitle>
-            <AlertDescription>
-              Um CNPJ inativo deve bloquear a abertura de campanhas. Esta tela sinaliza a restrição,
-              mas a trava definitiva depende do contrato backend.
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <Alert className="border-border/60">
-            <CircleAlert className="h-4 w-4" />
-            <AlertTitle>Pré-requisito para campanhas</AlertTitle>
-            <AlertDescription>
-              A criação de campanhas continua protegida pelo backend. Quando a API de empresa
-              estiver disponível, este bloco deve consultar e persistir o CNPJ antes de liberar
-              novas campanhas.
-            </AlertDescription>
-          </Alert>
-        )}
+        <Alert className="border-border/60">
+          <CircleAlert className="h-4 w-4" />
+          <AlertTitle>Validação empresarial pendente</AlertTitle>
+          <AlertDescription>
+            O CNPJ e o status operacional não bloqueiam a criação de campanhas neste ciclo. Quando a
+            API de empresa estiver disponível, este bloco deve consultar e persistir a situação
+            cadastral automaticamente.
+          </AlertDescription>
+        </Alert>
       </Card>
 
       <Card className="p-6 space-y-5 border-border/60">
@@ -416,8 +432,9 @@ export default function CompanyPage() {
           <Field label="CEP">
             <Input
               value={address.zip_code}
-              onChange={(e) => updAddress({ zip_code: e.target.value })}
+              onChange={(e) => updAddress({ zip_code: formatZipCode(e.target.value) })}
               placeholder="00000-000"
+              inputMode="numeric"
             />
           </Field>
           <Field label="Logradouro" className="sm:col-span-2">
@@ -451,12 +468,18 @@ export default function CompanyPage() {
             <Input value={address.city} onChange={(e) => updAddress({ city: e.target.value })} />
           </Field>
           <Field label="Estado">
-            <Input
-              value={address.state}
-              onChange={(e) => updAddress({ state: e.target.value })}
-              placeholder="SP"
-              maxLength={2}
-            />
+            <Select value={address.state} onValueChange={(state) => updAddress({ state })}>
+              <SelectTrigger>
+                <SelectValue placeholder="UF" />
+              </SelectTrigger>
+              <SelectContent>
+                {UF_OPTIONS.map((uf) => (
+                  <SelectItem key={uf} value={uf}>
+                    {uf}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
         </div>
       </Card>
@@ -474,33 +497,6 @@ export default function CompanyPage() {
         </Button>
       </div>
     </div>
-  );
-}
-
-function StatusButton({
-  active,
-  destructive,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  destructive?: boolean;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant={active ? "default" : "outline"}
-      className={
-        active && destructive
-          ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          : ""
-      }
-      onClick={onClick}
-    >
-      {label}
-    </Button>
   );
 }
 
