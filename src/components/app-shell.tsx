@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { logout } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { appLogoUrl, appLogoAlt } from "@/config/brand";
 
 const nav = [
@@ -18,6 +19,13 @@ export function AppShell() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { user, signOut } = useAuth();
+  const avatarUrl = user?.avatar || user?.image_url || "";
+  const initials = (user?.full_name || user?.email || "Empreendedor")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
 
   const handleSignOut = async () => {
     try { await logout(); } catch { /* ignora erro de rede */ }
@@ -53,10 +61,22 @@ export function AppShell() {
           })}
         </nav>
         <div className="p-3 border-t border-border">
-          <div className="px-3 py-2 text-xs text-muted-foreground">
-            <div className="font-medium text-foreground truncate">{user?.full_name ?? "Empreendedor"}</div>
-            <div className="truncate">{user?.email}</div>
-          </div>
+          <Link
+            to="/app/perfil-pessoal"
+            className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Alterar avatar e perfil pessoal"
+          >
+            <Avatar className="h-9 w-9 border border-border">
+              <AvatarImage src={avatarUrl} alt={user?.full_name ?? "Avatar do empreendedor"} />
+              <AvatarFallback>{initials || "EM"}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">
+                {user?.full_name ?? "Empreendedor"}
+              </div>
+              <div className="truncate">{user?.email}</div>
+            </div>
+          </Link>
           <Button variant="ghost" size="sm" className="w-full justify-start gap-2 text-muted-foreground" onClick={handleSignOut}>
             <LogOut className="w-4 h-4" /> Sair
           </Button>

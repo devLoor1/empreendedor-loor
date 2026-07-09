@@ -104,6 +104,33 @@ async function apiFetch(path: string, options: RequestInit = {}) {
   return handleApiResponse(res);
 }
 
+async function apiFormData(path: string, method: 'POST' | 'PUT', formData: FormData) {
+  const token = getToken();
+  const slug = import.meta.env.VITE_API_SLUG;
+
+  if (slug && !formData.has('platform_slug')) {
+    formData.append('platform_slug', slug);
+  }
+
+  const headers: Record<string, string> = {};
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  if (slug) {
+    headers['x-whitelabel-slug'] = slug;
+  }
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: formData,
+  });
+
+  return handleApiResponse(res);
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 export async function login(email: string, password: string) {
@@ -163,28 +190,7 @@ export async function updatePersonalInformation(data: Record<string, unknown>) {
 }
 
 export async function updateAvatar(formData: FormData) {
-  const token = getToken();
-  const slug = import.meta.env.VITE_API_SLUG;
-  
-  // Para FormData, adiciona o platform_slug como um campo
-  if (slug) {
-    formData.append('platform_slug', slug);
-  }
-  
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  if (slug) {
-    headers['x-whitelabel-slug'] = slug;
-  }
-  
-  const res = await fetch(`${API_BASE}/entrepreneurs/profile/avatar`, {
-    method: 'PUT',
-    headers,
-    body: formData,
-  });
-  return handleApiResponse(res);
+  return apiFormData('/entrepreneurs/profile/avatar', 'PUT', formData);
 }
 
 export async function changeUserPassword(old_password: string, password: string, password_confirmation: string) {
@@ -222,6 +228,10 @@ export async function saveBankingInformation(data: Record<string, unknown>) {
 
 export async function getBanks() {
   return apiFetch('/entrepreneurs/banks');
+}
+
+export async function getSegments() {
+  return apiFetch('/segments');
 }
 
 // ── Opportunities ─────────────────────────────────────────────────────────────
@@ -299,31 +309,22 @@ export async function getOpportunityDocuments(id: number) {
   return apiFetch(`/entrepreneurs/opportunities/${id}/documents`);
 }
 
+export async function getEntrepreneurDocuments() {
+  return apiFetch('/entrepreneurs/documents');
+}
+
+export async function uploadEntrepreneurDocument(formData: FormData) {
+  return apiFormData('/entrepreneurs/documents', 'POST', formData);
+}
+
+export async function replaceEntrepreneurDocument(documentId: number, formData: FormData) {
+  return apiFormData(`/entrepreneurs/documents/${documentId}`, 'PUT', formData);
+}
+
 // ── Images ────────────────────────────────────────────────────────────────────
 
 export async function uploadImage(formData: FormData) {
-  const token = getToken();
-  const slug = import.meta.env.VITE_API_SLUG;
-  
-  // Para FormData, adiciona o platform_slug como um campo
-  if (slug) {
-    formData.append('platform_slug', slug);
-  }
-  
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  if (slug) {
-    headers['x-whitelabel-slug'] = slug;
-  }
-  
-  const res = await fetch(`${API_BASE}/entrepreneurs/images`, {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
-  return handleApiResponse(res);
+  return apiFormData('/entrepreneurs/images', 'POST', formData);
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────────
