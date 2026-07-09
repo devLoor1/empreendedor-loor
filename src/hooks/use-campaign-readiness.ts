@@ -85,7 +85,7 @@ function buildItems(
       description: addressFailed
         ? "Não foi possível validar o endereço cadastrado agora."
         : addressComplete
-          ? "Endereço operacional encontrado."
+          ? "Endereço cadastrado confirmado pela API."
           : "Informe endereço, número, cidade, estado e CEP.",
       href: "/app/perfil-empresa",
       action: addressComplete ? "Revisar empresa" : "Completar empresa",

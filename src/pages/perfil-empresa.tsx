@@ -110,11 +110,51 @@ function isValidCnpj(value: string) {
 function getErrorMessage(error: unknown) {
   if (typeof error === "object" && error !== null) {
     const candidate = error as { errors?: Array<{ message?: string }>; message?: string };
+    const message = candidate.errors?.[0]?.message || candidate.message;
 
-    return candidate.errors?.[0]?.message || candidate.message || "Erro ao salvar endereço";
+    if (
+      message &&
+      !message.includes("Unexpected end of JSON input") &&
+      !message.includes("Failed to execute 'json'")
+    ) {
+      return message;
+    }
   }
 
-  return "Erro ao salvar endereço";
+  return "Não foi possível salvar o endereço. Tente novamente.";
+}
+
+function getAddressData(response: unknown): Partial<AddressForm> | null {
+  if (!response || typeof response !== "object") return null;
+
+  const candidate = response as { data?: unknown };
+  const data = candidate.data ?? response;
+
+  return data && typeof data === "object" ? (data as Partial<AddressForm>) : null;
+}
+
+function toAddressForm(data: Partial<AddressForm>): AddressForm {
+  return {
+    country_id: data.country_id ?? 1,
+    state: data.state ?? "",
+    city: data.city ?? "",
+    district: data.district ?? "",
+    zip_code: data.zip_code ?? "",
+    street_name: data.street_name ?? "",
+    number: data.number ?? "",
+    complement: data.complement ?? "",
+  };
+}
+
+function hasConfirmedAddress(data: Partial<AddressForm> | null): data is Partial<AddressForm> {
+  return Boolean(
+    data?.zip_code &&
+      data.street_name &&
+      data.city &&
+      data.state &&
+      data.district &&
+      data.number,
+  );
 }
 
 export default function CompanyPage() {
@@ -133,27 +173,21 @@ export default function CompanyPage() {
   useEffect(() => {
     getAddress()
       .then((res) => {
-        if (res?.data) {
-          const d = res.data;
-          setAddress({
-            country_id: d.country_id ?? 1,
-            state: d.state ?? "",
-            city: d.city ?? "",
-            district: d.district ?? "",
-            zip_code: d.zip_code ?? "",
-            street_name: d.street_name ?? "",
-            number: d.number ?? "",
-            complement: d.complement ?? "",
-          });
-          setSaved(true);
+        const persistedAddress = getAddressData(res);
+
+        if (persistedAddress) {
+          setAddress(toAddressForm(persistedAddress));
+          setSaved(hasConfirmedAddress(persistedAddress));
         }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const updAddress = (patch: Partial<AddressForm>) =>
+  const updAddress = (patch: Partial<AddressForm>) => {
+    setSaved(false);
     setAddress((current) => ({ ...current, ...patch }));
+  };
 
   const updCompany = (patch: Partial<CompanyForm>) => {
     setCompany((current) => ({ ...current, ...patch }));
@@ -205,9 +239,19 @@ export default function CompanyPage() {
         ...address,
         complement: address.complement || null,
       });
+      const persisted = getAddressData(await getAddress());
+
+      if (!hasConfirmedAddress(persisted)) {
+        throw new Error(
+          "Endereço enviado, mas não foi possível confirmar o salvamento. Recarregue a página e tente novamente.",
+        );
+      }
+
+      setAddress(toAddressForm(persisted));
       setSaved(true);
       toast.success("Endereço salvo com sucesso!");
     } catch (err: unknown) {
+      setSaved(false);
       toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);

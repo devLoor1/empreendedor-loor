@@ -1,6 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (window.location.protocol === 'https:' ? 'https://back.loor.vc/service' : 'http://127.0.0.1:3333');
 
 const TOKEN_KEY = 'entrepreneur_token';
+const DEFAULT_API_ERROR_MESSAGE = 'Não foi possível concluir a operação. Tente novamente.';
 
 // ── Token helpers ─────────────────────────────────────────────────────────────
 
@@ -17,6 +18,52 @@ export function clearToken() {
 }
 
 // ── Fetch wrapper ─────────────────────────────────────────────────────────────
+
+async function parseResponseBody(res: Response) {
+  if (res.status === 204 || res.status === 205 || res.headers.get('content-length') === '0') {
+    return null;
+  }
+
+  const text = await res.text();
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+
+  if (!contentType.includes('application/json')) {
+    return text;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function buildApiError(status: number, body: unknown) {
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    return { status, ...body };
+  }
+
+  if (typeof body === 'string' && body.trim()) {
+    return { status, message: body };
+  }
+
+  return { status, message: DEFAULT_API_ERROR_MESSAGE };
+}
+
+async function handleApiResponse(res: Response) {
+  const body = await parseResponseBody(res);
+
+  if (!res.ok) {
+    throw buildApiError(res.status, body);
+  }
+
+  return body;
+}
 
 async function apiFetch(path: string, options: RequestInit = {}) {
   const token = getToken();
@@ -54,13 +101,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     body,
   });
 
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw { status: res.status, ...body };
-  }
-
-  if (res.status === 204) return null;
-  return res.json();
+  return handleApiResponse(res);
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -114,7 +155,7 @@ export async function getPersonalInformation() {
   return apiFetch('/entrepreneurs/personal-information');
 }
 
-export async function updatePersonalInformation(data: Record<string, any>) {
+export async function updatePersonalInformation(data: Record<string, unknown>) {
   return apiFetch('/entrepreneurs/profile/personal-information', {
     method: 'PUT',
     body: JSON.stringify(data),
@@ -143,8 +184,7 @@ export async function updateAvatar(formData: FormData) {
     headers,
     body: formData,
   });
-  if (!res.ok) throw await res.json().catch(() => ({}));
-  return res.status === 204 ? null : res.json();
+  return handleApiResponse(res);
 }
 
 export async function changeUserPassword(old_password: string, password: string, password_confirmation: string) {
@@ -160,7 +200,7 @@ export async function getAddress() {
   return apiFetch('/entrepreneurs/address');
 }
 
-export async function saveAddress(data: Record<string, any>) {
+export async function saveAddress(data: Record<string, unknown>) {
   return apiFetch('/entrepreneurs/address', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -173,7 +213,7 @@ export async function getBankingInformation() {
   return apiFetch('/entrepreneurs/banking-information');
 }
 
-export async function saveBankingInformation(data: Record<string, any>) {
+export async function saveBankingInformation(data: Record<string, unknown>) {
   return apiFetch('/entrepreneurs/banking-information', {
     method: 'POST',
     body: JSON.stringify(data),
@@ -206,14 +246,14 @@ export async function getOpportunity(id: number) {
   return apiFetch(`/entrepreneurs/opportunities/${id}`);
 }
 
-export async function createOpportunity(data: Record<string, any>) {
+export async function createOpportunity(data: Record<string, unknown>) {
   return apiFetch('/entrepreneurs/opportunities', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export async function updateOpportunity(id: number, data: Record<string, any>) {
+export async function updateOpportunity(id: number, data: Record<string, unknown>) {
   return apiFetch(`/entrepreneurs/opportunities/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
@@ -283,8 +323,7 @@ export async function uploadImage(formData: FormData) {
     headers,
     body: formData,
   });
-  if (!res.ok) throw await res.json().catch(() => ({}));
-  return res.json();
+  return handleApiResponse(res);
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────────
