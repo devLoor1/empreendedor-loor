@@ -75,7 +75,18 @@ type WizardValidation = Record<WizardStep, boolean>;
 type SubmitErrorState = {
   message: string;
   step?: WizardStep;
+  items?: SubmitErrorItem[];
 } | null;
+
+type SubmitErrorItem = {
+  key: string;
+  field: string;
+  label: string;
+  message: string;
+  step: WizardStep;
+  stepLabel: string;
+  focusId?: string;
+};
 
 type ReferenceOption = {
   id: number;
@@ -262,6 +273,66 @@ const LONG_DESCRIPTION_MIN_LENGTH = 80;
 const CARD_TITLE_MIN_LENGTH = 5;
 const CARD_SUBTITLE_MIN_LENGTH = 20;
 const CARD_LONG_TEXT_MIN_LENGTH = 80;
+
+const SUBMIT_ERROR_FIELD_META: Record<
+  string,
+  {
+    label: string;
+    step: WizardStep;
+    focusId?: string;
+  }
+> = {
+  "opportunity.company_cnpj": {
+    label: "CNPJ da empresa",
+    step: "basics",
+    focusId: "documentNumber",
+  },
+  "opportunity.spe_cnpj": {
+    label: "CNPJ da SPE",
+    step: "basics",
+    focusId: "speCnpj",
+  },
+  "opportunity.segment_id": {
+    label: "Segmento",
+    step: "basics",
+    focusId: "segment",
+  },
+  "opportunity.image_id": {
+    label: "Imagem principal",
+    step: "media",
+    focusId: "heroImageFile",
+  },
+  "bank_account.bank_id": {
+    label: "Banco",
+    step: "banking",
+    focusId: "bankName",
+  },
+  "pix.key": {
+    label: "Chave Pix",
+    step: "banking",
+    focusId: "pixKey",
+  },
+  "pix.type": {
+    label: "Tipo de chave Pix",
+    step: "banking",
+    focusId: "pixType",
+  },
+  "debt.payment_frequency": {
+    label: "Frequência de pagamento",
+    step: "financial",
+    focusId: "paymentFrequency",
+  },
+  resource_utilization: {
+    label: "Uso dos recursos",
+    step: "basics",
+    focusId: "resourceUtilization",
+  },
+  "opportunity.resource_utilization": {
+    label: "Uso dos recursos",
+    step: "basics",
+    focusId: "resourceUtilization",
+  },
+};
 
 const REQUIRED_STEPS: WizardStep[] = [
   "modality",
@@ -703,6 +774,101 @@ function getMediaPendingItems(draft: CampaignDraft) {
   return pending;
 }
 
+function getStepLabel(step: WizardStep) {
+  return WIZARD_STEPS.find((item) => item.id === step)?.label ?? "Etapa";
+}
+
+function getSubmitErrorMeta(field: string) {
+  const directMeta = SUBMIT_ERROR_FIELD_META[field];
+  if (directMeta) return directMeta;
+
+  if (field.startsWith("debt.")) {
+    return { label: "Dados financeiros", step: "financial" as const };
+  }
+
+  if (field.startsWith("equity.")) {
+    return { label: "Dados financeiros", step: "financial" as const };
+  }
+
+  if (field.startsWith("bank_account.")) {
+    return { label: "Dados bancários", step: "banking" as const };
+  }
+
+  if (field.startsWith("pix.")) {
+    return { label: "Dados Pix", step: "banking" as const };
+  }
+
+  if (field.startsWith("opportunity.")) {
+    return { label: "Dados da oportunidade", step: "basics" as const };
+  }
+
+  return undefined;
+}
+
+function getBackendErrorEntries(error: unknown) {
+  if (!error || typeof error !== "object") return [];
+
+  const record = error as Record<string, unknown>;
+  const errors = Array.isArray(record.errors) ? record.errors : [];
+
+  return errors.filter((item): item is Record<string, unknown> => {
+    return Boolean(item && typeof item === "object" && !Array.isArray(item));
+  });
+}
+
+function getFriendlySubmitErrorMessage(field: string, rule: string, fallbackMessage: string) {
+  if (rule === "unique" && field === "opportunity.company_cnpj") {
+    return "Este CNPJ da empresa já está sendo usado em outra oportunidade. Informe outro CNPJ ou confirme se a oportunidade já foi cadastrada.";
+  }
+
+  if (rule === "unique" && field === "opportunity.spe_cnpj") {
+    return "Este CNPJ da SPE já está sendo usado em outra oportunidade. Informe outro CNPJ de SPE.";
+  }
+
+  const meta = getSubmitErrorMeta(field);
+
+  if (rule === "unique" && meta) {
+    return `${meta.label} já está sendo usado em outra oportunidade. Revise o campo antes de tentar novamente.`;
+  }
+
+  if (meta) {
+    return fallbackMessage && !fallbackMessage.includes(field)
+      ? fallbackMessage
+      : `Revise ${meta.label.toLowerCase()} antes de tentar novamente.`;
+  }
+
+  return fallbackMessage || "Revise este campo antes de tentar novamente.";
+}
+
+function getSubmitErrorItems(error: unknown): SubmitErrorItem[] {
+  return getBackendErrorEntries(error)
+    .map((entry, index) => {
+      const field = typeof entry.field === "string" ? entry.field : "";
+      const rule = typeof entry.rule === "string" ? entry.rule : "";
+      const backendMessage = typeof entry.message === "string" ? entry.message : "";
+      const meta = field ? getSubmitErrorMeta(field) : undefined;
+
+      if (!field || !meta) return null;
+
+      const message = getFriendlySubmitErrorMessage(field, rule, backendMessage);
+
+      return {
+        key: `${field}-${index}`,
+        field,
+        label: meta.label,
+        message,
+        step: meta.step,
+        stepLabel: getStepLabel(meta.step),
+        focusId: meta.focusId,
+      };
+    })
+    .filter((item): item is SubmitErrorItem => item !== null);
+}
+
+function getSubmitFieldError(submitError: SubmitErrorState, field: string) {
+  return submitError?.items?.find((item) => item.field === field);
+}
+
 function stringifyErrorShape(error: unknown) {
   if (!error || typeof error !== "object") return String(error ?? "").toLowerCase();
 
@@ -747,11 +913,28 @@ function getSubmitErrorMessage(error: unknown) {
     if (typeof record.message === "string" && record.message.trim()) return record.message;
     if (typeof record.error === "string" && record.error.trim()) return record.error;
     if (Number(record.status) === 422) {
-      return "O backend recusou alguns campos. Revise a etapa destacada e tente novamente.";
+      return "Não foi possível criar a oportunidade. Revise os dados informados e tente novamente.";
     }
   }
 
-  return "Não foi possível criar a oportunidade. Revise os campos destacados e tente novamente.";
+  return "Não foi possível criar a oportunidade. Revise os dados informados e tente novamente.";
+}
+
+function normalizeSubmitError(error: unknown): Exclude<SubmitErrorState, null> {
+  const items = getSubmitErrorItems(error);
+
+  if (items.length > 0) {
+    return {
+      message: "Revise os campos abaixo antes de tentar novamente.",
+      step: items[0].step,
+      items,
+    };
+  }
+
+  return {
+    message: getSubmitErrorMessage(error),
+    step: getSubmitErrorStep(error),
+  };
 }
 
 function FormField({
@@ -846,12 +1029,58 @@ function StepActions({
   );
 }
 
+function SubmitErrorAlert({
+  submitError,
+  onSelectItem,
+}: {
+  submitError: SubmitErrorState;
+  onSelectItem?: (item: SubmitErrorItem) => void;
+}) {
+  if (!submitError) return null;
+
+  const hasItems = Boolean(submitError.items?.length);
+
+  return (
+    <Alert variant="destructive">
+      <CircleAlert className="h-4 w-4" />
+      <AlertTitle>Não foi possível criar a oportunidade</AlertTitle>
+      <AlertDescription className="space-y-3">
+        <p>
+          {hasItems
+            ? "Revise os campos abaixo antes de tentar novamente."
+            : submitError.message}
+        </p>
+        {hasItems && (
+          <ul className="space-y-2">
+            {submitError.items?.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  onClick={() => onSelectItem?.(item)}
+                  className="w-full rounded-md border border-destructive/30 bg-background/60 px-3 py-2 text-left text-sm transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive/40"
+                >
+                  <span className="font-semibold">
+                    {item.stepLabel} · {item.label}:
+                  </span>{" "}
+                  {item.message}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function CampaignWizardProgress({
   currentStep,
   validation,
+  submitError,
 }: {
   currentStep: WizardStep;
   validation: WizardValidation;
+  submitError?: SubmitErrorState;
 }) {
   const activeIndex = getStepIndex(currentStep);
 
@@ -863,6 +1092,7 @@ function CampaignWizardProgress({
         const isDone = validation[step.id] && index < activeIndex;
         const isFuture = index > activeIndex;
         const isPendingPast = index < activeIndex && !validation[step.id];
+        const hasSubmitError = submitError?.items?.some((item) => item.step === step.id);
 
         return (
           <div
@@ -873,6 +1103,7 @@ function CampaignWizardProgress({
               isDone && "border-emerald-200 bg-emerald-50 text-emerald-900",
               isPendingPast && "border-destructive/40 bg-destructive/5 text-foreground",
               isFuture && "border-border bg-card text-muted-foreground",
+              hasSubmitError && "border-destructive bg-destructive/5 text-foreground",
             )}
           >
             <div
@@ -882,13 +1113,23 @@ function CampaignWizardProgress({
                 isDone && "border-emerald-500 bg-emerald-500 text-white",
                 isPendingPast && "border-destructive bg-destructive text-destructive-foreground",
                 isFuture && "border-border bg-background text-muted-foreground",
+                hasSubmitError && "border-destructive bg-destructive text-destructive-foreground",
               )}
             >
-              {isDone ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+              {hasSubmitError ? (
+                <CircleAlert className="h-4 w-4" />
+              ) : isDone ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <Icon className="h-4 w-4" />
+              )}
             </div>
             <div className="space-y-1">
               <p className="text-sm font-semibold">{step.label}</p>
               <p className="text-xs leading-relaxed">{step.description}</p>
+              {hasSubmitError && (
+                <p className="text-xs font-medium text-destructive">Revise esta etapa.</p>
+              )}
             </div>
           </div>
         );
@@ -985,6 +1226,7 @@ function BasicsStep({
   canContinue,
   onBack,
   onContinue,
+  submitError,
 }: {
   draft: CampaignDraft;
   segments: ReferenceOption[];
@@ -993,7 +1235,11 @@ function BasicsStep({
   canContinue: boolean;
   onBack: () => void;
   onContinue: () => void;
+  submitError: SubmitErrorState;
 }) {
+  const companyCnpjError = getSubmitFieldError(submitError, "opportunity.company_cnpj");
+  const speCnpjError = getSubmitFieldError(submitError, "opportunity.spe_cnpj");
+
   return (
     <Card>
       <CardHeader>
@@ -1043,7 +1289,16 @@ function BasicsStep({
               onChange={(event) => onPatch({ documentNumber: formatCnpj(event.target.value) })}
               placeholder="00.000.000/0000-00"
               inputMode="numeric"
+              aria-invalid={Boolean(companyCnpjError)}
+              className={cn(
+                companyCnpjError && "border-destructive focus-visible:ring-destructive/40",
+              )}
             />
+            {companyCnpjError && (
+              <p className="text-xs leading-relaxed text-destructive">
+                {companyCnpjError.message}
+              </p>
+            )}
           </FormField>
 
           <FormField id="responsibleCpf" label="CPF do responsável">
@@ -1063,7 +1318,12 @@ function BasicsStep({
               onChange={(event) => onPatch({ speCnpj: formatCnpj(event.target.value) })}
               placeholder="00.000.000/0000-00"
               inputMode="numeric"
+              aria-invalid={Boolean(speCnpjError)}
+              className={cn(speCnpjError && "border-destructive focus-visible:ring-destructive/40")}
             />
+            {speCnpjError && (
+              <p className="text-xs leading-relaxed text-destructive">{speCnpjError.message}</p>
+            )}
           </FormField>
         </div>
 
@@ -1971,6 +2231,7 @@ function ReviewStep({
   submitting,
   createdOpportunityId,
   submitError,
+  onSelectSubmitError,
 }: {
   draft: CampaignDraft;
   segments: ReferenceOption[];
@@ -1982,6 +2243,7 @@ function ReviewStep({
   submitting: boolean;
   createdOpportunityId: number | null;
   submitError: SubmitErrorState;
+  onSelectSubmitError: (item: SubmitErrorItem) => void;
 }) {
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
 
@@ -2017,13 +2279,7 @@ function ReviewStep({
           </Alert>
         )}
 
-        {submitError && (
-          <Alert variant="destructive">
-            <CircleAlert className="h-4 w-4" />
-            <AlertTitle>Revise os campos destacados antes de enviar</AlertTitle>
-            <AlertDescription>{submitError.message}</AlertDescription>
-          </Alert>
-        )}
+        <SubmitErrorAlert submitError={submitError} onSelectItem={onSelectSubmitError} />
 
         <div className="grid gap-4 md:grid-cols-2">
           <SummaryCard title="Identificação" icon={Building2}>
@@ -2278,6 +2534,21 @@ export default function CampaignCreatePage() {
     if (previous) setCurrentStep(previous.id);
   };
 
+  const focusField = (focusId?: string) => {
+    if (!focusId) return;
+
+    window.setTimeout(() => {
+      const field = document.getElementById(focusId);
+      field?.scrollIntoView({ behavior: "smooth", block: "center" });
+      field?.focus({ preventScroll: true });
+    }, 100);
+  };
+
+  const handleSubmitErrorItem = (item: SubmitErrorItem) => {
+    setCurrentStep(item.step);
+    focusField(item.focusId);
+  };
+
   const handleTextPatch =
     (field: keyof CampaignDraft) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
       patchDraft({ [field]: event.target.value } as Partial<CampaignDraft>);
@@ -2392,12 +2663,16 @@ export default function CampaignCreatePage() {
 
       toast.success("Oportunidade criada com sucesso.");
     } catch (error) {
-      const step = getSubmitErrorStep(error);
-      const message = getSubmitErrorMessage(error);
+      const normalizedError = normalizeSubmitError(error);
 
-      setSubmitError({ message, step });
-      if (step) setCurrentStep(step);
-      toast.error(message);
+      setSubmitError(normalizedError);
+
+      if (normalizedError.items?.length) {
+        toast.error("Não foi possível criar a oportunidade. Revise os campos indicados.");
+      } else {
+        if (normalizedError.step) setCurrentStep(normalizedError.step);
+        toast.error(normalizedError.message);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -2482,14 +2757,14 @@ export default function CampaignCreatePage() {
             </AlertDescription>
           </Alert>
 
-          <CampaignWizardProgress currentStep={currentStep} validation={validation} />
+          <CampaignWizardProgress
+            currentStep={currentStep}
+            validation={validation}
+            submitError={submitError}
+          />
 
-          {submitError && (
-            <Alert variant="destructive">
-              <CircleAlert className="h-4 w-4" />
-              <AlertTitle>Revise os campos destacados antes de enviar</AlertTitle>
-              <AlertDescription>{submitError.message}</AlertDescription>
-            </Alert>
+          {currentStep !== "review" && (
+            <SubmitErrorAlert submitError={submitError} onSelectItem={handleSubmitErrorItem} />
           )}
 
           {currentStep === "modality" && (
@@ -2505,6 +2780,7 @@ export default function CampaignCreatePage() {
               canContinue={validation.basics}
               onBack={goToPreviousStep}
               onContinue={goToNextStep}
+              submitError={submitError}
             />
           )}
 
@@ -2572,6 +2848,7 @@ export default function CampaignCreatePage() {
               submitting={submitting}
               createdOpportunityId={createdOpportunityId}
               submitError={submitError}
+              onSelectSubmitError={handleSubmitErrorItem}
             />
           )}
 
