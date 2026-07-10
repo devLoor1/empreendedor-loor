@@ -70,6 +70,13 @@ type WizardStep =
   | "media"
   | "review";
 
+type WizardValidation = Record<WizardStep, boolean>;
+
+type SubmitErrorState = {
+  message: string;
+  step?: WizardStep;
+} | null;
+
 type ReferenceOption = {
   id: number;
   name: string;
@@ -250,6 +257,62 @@ const RESOURCE_UTILIZATION_OPTIONS = [
 
 const IMAGE_MAX_SIZE = 2 * 1024 * 1024;
 const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png"];
+const SHORT_DESCRIPTION_MIN_LENGTH = 20;
+const LONG_DESCRIPTION_MIN_LENGTH = 80;
+const CARD_TITLE_MIN_LENGTH = 5;
+const CARD_SUBTITLE_MIN_LENGTH = 20;
+const CARD_LONG_TEXT_MIN_LENGTH = 80;
+
+const REQUIRED_STEPS: WizardStep[] = [
+  "modality",
+  "basics",
+  "financial",
+  "target",
+  "operations",
+  "banking",
+  "media",
+];
+
+const STEP_BLOCKING_MESSAGES: Record<WizardStep, string> = {
+  modality: "Escolha uma modalidade antes de avançar.",
+  basics: "Revise os dados básicos: documentos, segmento, uso dos recursos, WhatsApp e descrições.",
+  financial: "Complete os dados financeiros da modalidade escolhida.",
+  target: "Informe meta e valor por cota válidos.",
+  operations: "Complete equipe e endereço da operação.",
+  banking: "Revise banco, agência, conta e chave Pix.",
+  media: "Complete card, textos e imagem principal antes da revisão.",
+  review: "Confirme a ação persistente antes do envio final.",
+};
+
+const UF_OPTIONS = [
+  "AC",
+  "AL",
+  "AP",
+  "AM",
+  "BA",
+  "CE",
+  "DF",
+  "ES",
+  "GO",
+  "MA",
+  "MT",
+  "MS",
+  "MG",
+  "PA",
+  "PB",
+  "PR",
+  "PE",
+  "PI",
+  "RJ",
+  "RN",
+  "RS",
+  "RO",
+  "RR",
+  "SC",
+  "SP",
+  "SE",
+  "TO",
+];
 
 const MODALITY_OPTIONS: Array<{
   id: CampaignModality;
@@ -317,6 +380,35 @@ function getResponseData(response: unknown): Record<string, unknown> | null {
 
 function fieldHasText(value: string, minLength = 1) {
   return value.trim().length >= minLength;
+}
+
+function isValidOptionalUrl(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) return true;
+  if (trimmed === "https://" || trimmed === "https://...") return false;
+
+  try {
+    const url = new URL(trimmed);
+
+    return ["http:", "https:"].includes(url.protocol) && fieldHasText(url.hostname, 3);
+  } catch {
+    return false;
+  }
+}
+
+function isValidWhatsAppGroupUrl(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed || trimmed === "https://chat.whatsapp.com/...") return false;
+
+  try {
+    const url = new URL(trimmed);
+
+    return url.protocol === "https:" && url.hostname === "chat.whatsapp.com" && url.pathname.length > 1;
+  } catch {
+    return false;
+  }
 }
 
 function toPositiveNumber(value: string) {
@@ -399,6 +491,16 @@ function validateImage(file: File) {
   return { file: normalized, error: null };
 }
 
+function formatFileSize(size: number) {
+  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+function getImageFileSummary(file: File) {
+  return `${file.name} · ${formatFileSize(file.size)}`;
+}
+
 async function uploadCampaignImage(file: File, folder: "opportunities/banner" | "opportunities/extra_images") {
   const formData = new FormData();
   formData.append("image", normalizeImageFilename(file));
@@ -446,6 +548,13 @@ function getOptionName(options: ReferenceOption[], id: string) {
   return options.find((option) => String(option.id) === id)?.name || "Não informado";
 }
 
+function hasReferenceId(options: ReferenceOption[], id: string) {
+  if (!id) return false;
+  if (options.length === 0) return true;
+
+  return options.some((option) => String(option.id) === id);
+}
+
 function getStepIndex(step: WizardStep) {
   return WIZARD_STEPS.findIndex((item) => item.id === step);
 }
@@ -458,7 +567,11 @@ function getQuotaCount(targetAmount: string, shareValue: string) {
   return Math.floor(target / share);
 }
 
-function getDraftValidation(draft: CampaignDraft) {
+function getDraftValidation(
+  draft: CampaignDraft,
+  segments: ReferenceOption[] = [],
+  banks: ReferenceOption[] = [],
+): WizardValidation {
   const target = toPositiveNumber(draft.targetAmount);
   const share = toPositiveNumber(draft.shareValue);
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
@@ -467,11 +580,12 @@ function getDraftValidation(draft: CampaignDraft) {
     isValidDocument(draft.documentNumber, "cnpj") &&
     isValidDocument(draft.responsibleCpf, "cpf") &&
     isValidDocument(draft.speCnpj, "cnpj") &&
-    fieldHasText(draft.segment) &&
+    hasReferenceId(segments, draft.segment) &&
     fieldHasText(draft.resourceUtilization) &&
-    draft.whatsapp.trim().startsWith("https://chat.whatsapp.com/") &&
-    fieldHasText(draft.shortDescription, 20) &&
-    fieldHasText(draft.longDescription, 80);
+    isValidWhatsAppGroupUrl(draft.whatsapp) &&
+    isValidOptionalUrl(draft.videoUrl) &&
+    fieldHasText(draft.shortDescription, SHORT_DESCRIPTION_MIN_LENGTH) &&
+    fieldHasText(draft.longDescription, LONG_DESCRIPTION_MIN_LENGTH);
 
   const debtValid =
     draft.modality === "debt" &&
@@ -494,13 +608,13 @@ function getDraftValidation(draft: CampaignDraft) {
   const operationsValid =
     fieldHasText(draft.teamMembers, 10) &&
     fieldHasText(draft.zipCode, 9) &&
-    fieldHasText(draft.state, 2) &&
+    UF_OPTIONS.includes(draft.state) &&
     fieldHasText(draft.city, 2) &&
     fieldHasText(draft.street, 3) &&
     fieldHasText(draft.number);
 
   const bankingValid =
-    fieldHasText(draft.bankName) &&
+    hasReferenceId(banks, draft.bankName) &&
     onlyDigits(draft.agency).length === 4 &&
     onlyDigits(draft.account).length >= 5 &&
     onlyDigits(draft.account).length <= 16 &&
@@ -509,10 +623,21 @@ function getDraftValidation(draft: CampaignDraft) {
     (draft.privacy === "public" || fieldHasText(draft.allowedCpfs, 11));
 
   const mediaValid =
-    fieldHasText(draft.cardTitle, 5) &&
-    fieldHasText(draft.cardSubtitle, 20) &&
-    fieldHasText(draft.cardLongText, 80) &&
-    draft.heroImageFile !== null;
+    fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH) &&
+    fieldHasText(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH) &&
+    fieldHasText(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH) &&
+    draft.heroImageFile !== null &&
+    isValidOptionalUrl(draft.extraVideoUrl);
+
+  const requiredValid = [
+    draft.modality !== null,
+    basicsValid,
+    debtValid || equityValid,
+    targetValid,
+    operationsValid,
+    bankingValid,
+    mediaValid,
+  ].every(Boolean);
 
   return {
     modality: draft.modality !== null,
@@ -522,8 +647,85 @@ function getDraftValidation(draft: CampaignDraft) {
     operations: operationsValid,
     banking: bankingValid,
     media: mediaValid,
-    review: draft.safeReviewAccepted,
+    review: requiredValid && draft.safeReviewAccepted,
   };
+}
+
+function getFirstInvalidRequiredStep(validation: WizardValidation) {
+  return REQUIRED_STEPS.find((step) => !validation[step]) ?? null;
+}
+
+function canEnterWizardStep(step: WizardStep, validation: WizardValidation) {
+  const targetIndex = getStepIndex(step);
+
+  if (targetIndex <= 0) return true;
+
+  return WIZARD_STEPS.slice(0, targetIndex).every((previous) => validation[previous.id]);
+}
+
+function getBlockingStepFor(step: WizardStep, validation: WizardValidation) {
+  const targetIndex = getStepIndex(step);
+
+  return WIZARD_STEPS.slice(0, targetIndex).find((previous) => !validation[previous.id])?.id ?? null;
+}
+
+function getCharacterHint(value: string, minLength: number, maxLength?: number) {
+  const current = value.trim().length;
+  const minStatus = current >= minLength ? "mínimo OK" : `faltam ${minLength - current}`;
+  const maxStatus = maxLength ? ` de ${maxLength}` : "";
+
+  return `${current}${maxStatus} caracteres · ${minStatus}`;
+}
+
+function stringifyErrorShape(error: unknown) {
+  if (!error || typeof error !== "object") return String(error ?? "").toLowerCase();
+
+  const keys: string[] = [];
+
+  function visit(value: unknown, prefix = "") {
+    if (!value || typeof value !== "object") return;
+
+    Object.entries(value as Record<string, unknown>).forEach(([key, nested]) => {
+      const path = prefix ? `${prefix}.${key}` : key;
+      keys.push(path.toLowerCase());
+      visit(nested, path);
+    });
+  }
+
+  visit(error);
+
+  return keys.join(" ");
+}
+
+function getSubmitErrorStep(error: unknown): WizardStep | undefined {
+  const shape = stringifyErrorShape(error);
+
+  if (/image|extra_images|media/.test(shape)) return "media";
+  if (/bank|pix|agency|account|allowed_cpfs|is_private/.test(shape)) return "banking";
+  if (/address|city|state|district|street|zip|number|warrant/.test(shape)) return "operations";
+  if (/debt|equity|installment|payment_frequency|profitability|participation/.test(shape)) {
+    return "financial";
+  }
+  if (/goal|min_investment|monetary|quota|target/.test(shape)) return "target";
+  if (/segment|resource|company_cnpj|spe_cnpj|cpf|whatsapp|video|description|name/.test(shape)) {
+    return "basics";
+  }
+
+  return undefined;
+}
+
+function getSubmitErrorMessage(error: unknown) {
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+
+    if (typeof record.message === "string" && record.message.trim()) return record.message;
+    if (typeof record.error === "string" && record.error.trim()) return record.error;
+    if (Number(record.status) === 422) {
+      return "O backend recusou alguns campos. Revise a etapa destacada e tente novamente.";
+    }
+  }
+
+  return "Não foi possível criar a oportunidade. Revise os campos destacados e tente novamente.";
 }
 
 function FormField({
@@ -542,6 +744,50 @@ function FormField({
       <Label htmlFor={id}>{label}</Label>
       {children}
       {hint && <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function FieldHint({ valid, message }: { valid: boolean; message: string }) {
+  return (
+    <p className={cn("text-xs leading-relaxed", valid ? "text-emerald-700" : "text-destructive")}>
+      {message}
+    </p>
+  );
+}
+
+function ImagePreviewCard({
+  file,
+  previewUrl,
+  onRemove,
+}: {
+  file: File;
+  previewUrl?: string;
+  onRemove?: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt=""
+          className="h-14 w-14 shrink-0 rounded-md border object-cover"
+        />
+      ) : (
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md border bg-muted">
+          <Image className="h-5 w-5 text-muted-foreground" />
+        </div>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
+        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+        <p className="mt-1 text-xs text-emerald-700">Pronta para envio</p>
+      </div>
+      {onRemove && (
+        <Button type="button" variant="outline" size="sm" onClick={onRemove}>
+          Remover
+        </Button>
+      )}
     </div>
   );
 }
@@ -574,7 +820,13 @@ function StepActions({
   );
 }
 
-function CampaignWizardProgress({ currentStep }: { currentStep: WizardStep }) {
+function CampaignWizardProgress({
+  currentStep,
+  validation,
+}: {
+  currentStep: WizardStep;
+  validation: WizardValidation;
+}) {
   const activeIndex = getStepIndex(currentStep);
 
   return (
@@ -582,8 +834,9 @@ function CampaignWizardProgress({ currentStep }: { currentStep: WizardStep }) {
       {WIZARD_STEPS.map((step, index) => {
         const Icon = step.icon;
         const isActive = step.id === currentStep;
-        const isDone = index < activeIndex;
+        const isDone = validation[step.id] && index < activeIndex;
         const isFuture = index > activeIndex;
+        const isPendingPast = index < activeIndex && !validation[step.id];
 
         return (
           <div
@@ -592,6 +845,7 @@ function CampaignWizardProgress({ currentStep }: { currentStep: WizardStep }) {
               "flex min-h-28 flex-col gap-3 rounded-lg border p-3 transition-colors",
               isActive && "border-primary bg-primary/5",
               isDone && "border-emerald-200 bg-emerald-50 text-emerald-900",
+              isPendingPast && "border-destructive/40 bg-destructive/5 text-foreground",
               isFuture && "border-border bg-card text-muted-foreground",
             )}
           >
@@ -600,6 +854,7 @@ function CampaignWizardProgress({ currentStep }: { currentStep: WizardStep }) {
                 "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
                 isActive && "border-primary bg-primary text-primary-foreground",
                 isDone && "border-emerald-500 bg-emerald-500 text-white",
+                isPendingPast && "border-destructive bg-destructive text-destructive-foreground",
                 isFuture && "border-border bg-background text-muted-foreground",
               )}
             >
@@ -748,6 +1003,9 @@ function BasicsStep({
                 ))}
               </SelectContent>
             </Select>
+            {!referencesLoading && segments.length === 1 && (
+              <FieldHint valid message="Segmento único carregado da API." />
+            )}
           </FormField>
         </div>
 
@@ -804,7 +1062,7 @@ function BasicsStep({
         <FormField
           id="shortDescription"
           label="Descrição curta"
-          hint="Mínimo visual: 20 caracteres."
+          hint={getCharacterHint(draft.shortDescription, SHORT_DESCRIPTION_MIN_LENGTH)}
         >
           <Input
             id="shortDescription"
@@ -817,7 +1075,7 @@ function BasicsStep({
         <FormField
           id="longDescription"
           label="Descrição longa"
-          hint="Mínimo visual: 80 caracteres."
+          hint={getCharacterHint(draft.longDescription, LONG_DESCRIPTION_MIN_LENGTH)}
         >
           <Textarea
             id="longDescription"
@@ -836,6 +1094,16 @@ function BasicsStep({
               onChange={(event) => onPatch({ videoUrl: event.target.value })}
               placeholder="https://..."
             />
+            {draft.videoUrl.trim() && (
+              <FieldHint
+                valid={isValidOptionalUrl(draft.videoUrl)}
+                message={
+                  isValidOptionalUrl(draft.videoUrl)
+                    ? "URL de vídeo válida."
+                    : "Informe uma URL completa ou deixe o campo vazio."
+                }
+              />
+            )}
           </FormField>
 
           <FormField
@@ -849,6 +1117,16 @@ function BasicsStep({
               onChange={(event) => onPatch({ whatsapp: event.target.value })}
               placeholder="https://chat.whatsapp.com/..."
             />
+            {draft.whatsapp.trim() && (
+              <FieldHint
+                valid={isValidWhatsAppGroupUrl(draft.whatsapp)}
+                message={
+                  isValidWhatsAppGroupUrl(draft.whatsapp)
+                    ? "Link de WhatsApp válido."
+                    : "Use um link completo de grupo em https://chat.whatsapp.com/."
+                }
+              />
+            )}
           </FormField>
         </div>
 
@@ -1125,12 +1403,18 @@ function OperationsStep({
             />
           </FormField>
           <FormField id="state" label="UF">
-            <Input
-              id="state"
-              value={draft.state}
-              onChange={(event) => onPatch({ state: event.target.value.toUpperCase().slice(0, 2) })}
-              placeholder="SP"
-            />
+            <Select value={draft.state} onValueChange={(state) => onPatch({ state })}>
+              <SelectTrigger id="state">
+                <SelectValue placeholder="UF" />
+              </SelectTrigger>
+              <SelectContent>
+                {UF_OPTIONS.map((uf) => (
+                  <SelectItem key={uf} value={uf}>
+                    {uf}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FormField>
           <FormField id="city" label="Cidade">
             <Input
@@ -1221,6 +1505,9 @@ function BankingStep({
                 ))}
               </SelectContent>
             </Select>
+            {banks.length === 0 && (
+              <FieldHint valid={false} message="Aguarde o carregamento dos bancos reais." />
+            )}
           </FormField>
           <FormField id="agency" label="Agência">
             <Input
@@ -1253,7 +1540,7 @@ function BankingStep({
 
         <div className="grid gap-4 md:grid-cols-[220px_1fr]">
           <FormField id="pixType" label="Tipo de chave Pix">
-            <Select value={draft.pixType} onValueChange={(pixType) => onPatch({ pixType })}>
+            <Select value={draft.pixType} onValueChange={(pixType) => onPatch({ pixType, pixKey: "" })}>
               <SelectTrigger id="pixType">
                 <SelectValue />
               </SelectTrigger>
@@ -1273,6 +1560,16 @@ function BankingStep({
               onChange={(event) => onPatch({ pixKey: event.target.value })}
               placeholder="chave-sintetica@example.test"
             />
+            {draft.pixKey.trim() && (
+              <FieldHint
+                valid={isValidPix(draft.pixType, draft.pixKey)}
+                message={
+                  isValidPix(draft.pixType, draft.pixKey)
+                    ? `Chave válida para ${PIX_TYPES.find((type) => type.value === draft.pixType)?.label}.`
+                    : "Revise o formato da chave Pix para o tipo selecionado."
+                }
+              />
+            )}
           </FormField>
         </div>
 
@@ -1353,6 +1650,31 @@ function MediaStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const heroPreviewUrl = useMemo(
+    () => (draft.heroImageFile ? URL.createObjectURL(draft.heroImageFile) : undefined),
+    [draft.heroImageFile],
+  );
+  const extraPreviewUrls = useMemo(
+    () =>
+      draft.extraImageFiles.map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+      })),
+    [draft.extraImageFiles],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (heroPreviewUrl) URL.revokeObjectURL(heroPreviewUrl);
+    };
+  }, [heroPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      extraPreviewUrls.forEach((item) => URL.revokeObjectURL(item.url));
+    };
+  }, [extraPreviewUrls]);
+
   const handleHeroImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -1389,6 +1711,12 @@ function MediaStep({
     }
 
     onPatch({ extraImageFiles: accepted });
+  };
+
+  const removeExtraImage = (fileName: string) => {
+    onPatch({
+      extraImageFiles: draft.extraImageFiles.filter((file) => file.name !== fileName),
+    });
   };
 
   return (
@@ -1432,18 +1760,40 @@ function MediaStep({
           label="Arquivo da imagem principal"
           hint="Obrigatório para criar a oportunidade. PNG/JPG até 2 MB; extensão final normalizada para lowercase."
         >
-          <Input id="heroImageFile" type="file" accept=".png,.jpg,.jpeg" onChange={handleHeroImage} />
-          {draft.heroImageFile && (
-            <p className="text-xs text-muted-foreground">
-              Selecionado: {draft.heroImageFile.name}
-            </p>
-          )}
+          <div className="space-y-3">
+            <Input
+              id="heroImageFile"
+              type="file"
+              accept=".png,.jpg,.jpeg"
+              onChange={handleHeroImage}
+              className="sr-only"
+            />
+            <Label
+              htmlFor="heroImageFile"
+              className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 p-5 text-center transition-colors hover:border-primary/70"
+            >
+              <Image className="mb-2 h-6 w-6 text-primary" />
+              <span className="font-medium text-foreground">
+                {draft.heroImageFile ? "Trocar imagem principal" : "Selecionar imagem principal"}
+              </span>
+              <span className="mt-1 text-xs text-muted-foreground">PNG, JPG ou JPEG até 2 MB</span>
+            </Label>
+            {draft.heroImageFile ? (
+              <ImagePreviewCard
+                file={draft.heroImageFile}
+                previewUrl={heroPreviewUrl}
+                onRemove={() => onPatch({ heroImageFile: null })}
+              />
+            ) : (
+              <FieldHint valid={false} message="Imagem principal obrigatória para criar." />
+            )}
+          </div>
         </FormField>
 
         <FormField
           id="cardSubtitle"
           label="Texto curto do card"
-          hint="Mínimo visual: 20 caracteres."
+          hint={getCharacterHint(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH)}
         >
           <Input
             id="cardSubtitle"
@@ -1456,7 +1806,7 @@ function MediaStep({
         <FormField
           id="cardLongText"
           label="Texto longo da campanha"
-          hint="Mínimo visual: 80 caracteres."
+          hint={getCharacterHint(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH)}
         >
           <Textarea
             id="cardLongText"
@@ -1490,13 +1840,30 @@ function MediaStep({
               id="extraImageFiles"
               type="file"
               accept=".png,.jpg,.jpeg"
-              multiple
+            multiple
               onChange={handleExtraImages}
+              className="sr-only"
             />
-            {draft.extraImageFiles.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {draft.extraImageFiles.length} imagem(ns) extra(s) selecionada(s).
-              </p>
+            <Label
+              htmlFor="extraImageFiles"
+              className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed bg-muted/30 p-4 text-sm font-medium text-foreground transition-colors hover:border-primary/70"
+            >
+              Selecionar imagens extras
+            </Label>
+            {extraPreviewUrls.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  {extraPreviewUrls.length} imagem(ns) extra(s) pronta(s) para envio.
+                </p>
+                {extraPreviewUrls.map((item) => (
+                  <ImagePreviewCard
+                    key={`${item.file.name}-${item.file.lastModified}`}
+                    file={item.file}
+                    previewUrl={item.url}
+                    onRemove={() => removeExtraImage(item.file.name)}
+                  />
+                ))}
+              </div>
             )}
           </FormField>
 
@@ -1507,8 +1874,29 @@ function MediaStep({
               onChange={(event) => onPatch({ extraVideoUrl: event.target.value })}
               placeholder="https://..."
             />
+            {draft.extraVideoUrl.trim() && (
+              <FieldHint
+                valid={isValidOptionalUrl(draft.extraVideoUrl)}
+                message={
+                  isValidOptionalUrl(draft.extraVideoUrl)
+                    ? "URL de vídeo complementar válida."
+                    : "Informe uma URL completa ou deixe o campo vazio."
+                }
+              />
+            )}
           </FormField>
         </div>
+
+        {!canContinue && (
+          <Alert>
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle>Card e mídia incompletos</AlertTitle>
+            <AlertDescription>
+              Revise título, textos mínimos, URL complementar e imagem principal antes de seguir
+              para a revisão.
+            </AlertDescription>
+          </Alert>
+        )}
 
         <StepActions
           canContinue={canContinue}
@@ -1531,6 +1919,7 @@ function ReviewStep({
   onSubmit,
   submitting,
   createdOpportunityId,
+  submitError,
 }: {
   draft: CampaignDraft;
   segments: ReferenceOption[];
@@ -1541,6 +1930,7 @@ function ReviewStep({
   onSubmit: () => void;
   submitting: boolean;
   createdOpportunityId: number | null;
+  submitError: SubmitErrorState;
 }) {
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
 
@@ -1573,6 +1963,14 @@ function ReviewStep({
               O backend retornou o identificador {createdOpportunityId}. Revise a listagem de
               campanhas para acompanhar o status.
             </AlertDescription>
+          </Alert>
+        )}
+
+        {submitError && (
+          <Alert variant="destructive">
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle>Revise os campos destacados antes de enviar</AlertTitle>
+            <AlertDescription>{submitError.message}</AlertDescription>
           </Alert>
         )}
 
@@ -1638,7 +2036,7 @@ function ReviewStep({
             <SummaryItem label="Texto curto" value={draft.cardSubtitle || "Não informado"} />
             <SummaryItem
               label="Mídia"
-              value={draft.heroImageNote || draft.extraVideoUrl ? "Referenciada" : "Opcional"}
+              value={draft.heroImageFile ? getImageFileSummary(draft.heroImageFile) : "Pendente"}
             />
           </SummaryCard>
         </div>
@@ -1745,7 +2143,8 @@ export default function CampaignCreatePage() {
   const [referencesLoading, setReferencesLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
-  const validation = useMemo(() => getDraftValidation(draft), [draft]);
+  const [submitError, setSubmitError] = useState<SubmitErrorState>(null);
+  const validation = useMemo(() => getDraftValidation(draft, segments, banks), [banks, draft, segments]);
   const showWizard = canStart || previewWizard;
 
   useEffect(() => {
@@ -1792,6 +2191,7 @@ export default function CampaignCreatePage() {
 
   const patchDraft = (patch: Partial<CampaignDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
+    setSubmitError(null);
   };
 
   const resetPreview = () => {
@@ -1801,13 +2201,24 @@ export default function CampaignCreatePage() {
   };
 
   const goToStep = (step: WizardStep) => {
+    if (!canEnterWizardStep(step, validation)) {
+      const blockingStep = getBlockingStepFor(step, validation);
+
+      if (blockingStep) {
+        setCurrentStep(blockingStep);
+        toast.error(STEP_BLOCKING_MESSAGES[blockingStep]);
+      }
+
+      return;
+    }
+
     setCurrentStep(step);
   };
 
   const goToNextStep = () => {
     const index = getStepIndex(currentStep);
     const next = WIZARD_STEPS[index + 1];
-    if (next) setCurrentStep(next.id);
+    if (next) goToStep(next.id);
   };
 
   const goToPreviousStep = () => {
@@ -1821,12 +2232,26 @@ export default function CampaignCreatePage() {
       patchDraft({ [field]: event.target.value } as Partial<CampaignDraft>);
 
   const handleSubmit = async () => {
+    const firstInvalidStep = getFirstInvalidRequiredStep(validation);
+
+    if (firstInvalidStep) {
+      setCurrentStep(firstInvalidStep);
+      toast.error(STEP_BLOCKING_MESSAGES[firstInvalidStep]);
+      return;
+    }
+
+    if (!validation.review) {
+      toast.error("Confirme a ação persistente antes de enviar.");
+      return;
+    }
+
     if (!draft.heroImageFile) {
       toast.error("Envie a imagem principal antes de criar a oportunidade.");
       return;
     }
 
     setSubmitting(true);
+    setSubmitError(null);
 
     try {
       const imageId = await uploadCampaignImage(draft.heroImageFile, "opportunities/banner");
@@ -1915,8 +2340,13 @@ export default function CampaignCreatePage() {
       }
 
       toast.success("Oportunidade criada com sucesso.");
-    } catch {
-      toast.error("Não foi possível criar a oportunidade.");
+    } catch (error) {
+      const step = getSubmitErrorStep(error);
+      const message = getSubmitErrorMessage(error);
+
+      setSubmitError({ message, step });
+      if (step) setCurrentStep(step);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -2001,7 +2431,15 @@ export default function CampaignCreatePage() {
             </AlertDescription>
           </Alert>
 
-          <CampaignWizardProgress currentStep={currentStep} />
+          <CampaignWizardProgress currentStep={currentStep} validation={validation} />
+
+          {submitError && (
+            <Alert variant="destructive">
+              <CircleAlert className="h-4 w-4" />
+              <AlertTitle>Revise os campos destacados antes de enviar</AlertTitle>
+              <AlertDescription>{submitError.message}</AlertDescription>
+            </Alert>
+          )}
 
           {currentStep === "modality" && (
             <ModalityStep draft={draft} onPatch={patchDraft} onContinue={goToNextStep} />
@@ -2082,6 +2520,7 @@ export default function CampaignCreatePage() {
               onSubmit={handleSubmit}
               submitting={submitting}
               createdOpportunityId={createdOpportunityId}
+              submitError={submitError}
             />
           )}
 
@@ -2094,9 +2533,18 @@ export default function CampaignCreatePage() {
                 variant={step.id === currentStep ? "default" : "outline"}
                 size="sm"
                 onClick={() => goToStep(step.id)}
-                disabled={index > getStepIndex(currentStep) + 1}
+                title={
+                  canEnterWizardStep(step.id, validation)
+                    ? undefined
+                    : "Há etapas anteriores pendentes."
+                }
+                className={cn(
+                  !canEnterWizardStep(step.id, validation) &&
+                    "border-dashed text-muted-foreground hover:text-muted-foreground",
+                )}
               >
                 {step.label}
+                {!canEnterWizardStep(step.id, validation) && index > 0 ? " · pendente" : ""}
               </Button>
             ))}
           </div>
