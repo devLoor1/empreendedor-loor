@@ -677,6 +677,32 @@ function getCharacterHint(value: string, minLength: number, maxLength?: number) 
   return `${current}${maxStatus} caracteres · ${minStatus}`;
 }
 
+function getMediaPendingItems(draft: CampaignDraft) {
+  const pending: string[] = [];
+
+  if (!fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH)) {
+    pending.push(`Título do card: informe pelo menos ${CARD_TITLE_MIN_LENGTH} caracteres.`);
+  }
+
+  if (!fieldHasText(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH)) {
+    pending.push(`Texto curto: informe pelo menos ${CARD_SUBTITLE_MIN_LENGTH} caracteres.`);
+  }
+
+  if (!fieldHasText(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH)) {
+    pending.push(`Texto longo: informe pelo menos ${CARD_LONG_TEXT_MIN_LENGTH} caracteres.`);
+  }
+
+  if (!draft.heroImageFile) {
+    pending.push("Imagem principal: selecione um arquivo PNG/JPG até 2 MB.");
+  }
+
+  if (draft.extraVideoUrl.trim() && !isValidOptionalUrl(draft.extraVideoUrl)) {
+    pending.push("URL complementar: informe uma URL completa ou deixe o campo vazio.");
+  }
+
+  return pending;
+}
+
 function stringifyErrorShape(error: unknown) {
   if (!error || typeof error !== "object") return String(error ?? "").toLowerCase();
 
@@ -1662,6 +1688,9 @@ function MediaStep({
       })),
     [draft.extraImageFiles],
   );
+  const mediaPendingItems = getMediaPendingItems(draft);
+  const cardTitleLength = draft.cardTitle.trim().length;
+  const cardTitleValid = fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH);
 
   useEffect(() => {
     return () => {
@@ -1733,12 +1762,30 @@ function MediaStep({
       <CardContent className="space-y-6">
         <div className="grid gap-4 md:grid-cols-2">
           <FormField id="cardTitle" label="Título do card">
-            <Input
-              id="cardTitle"
-              value={draft.cardTitle}
-              onChange={(event) => onPatch({ cardTitle: event.target.value })}
-              placeholder="Título comercial da campanha"
-            />
+            <div className="space-y-1.5">
+              <Input
+                id="cardTitle"
+                value={draft.cardTitle}
+                onChange={(event) => onPatch({ cardTitle: event.target.value })}
+                placeholder="Título comercial da campanha"
+                aria-invalid={!cardTitleValid}
+                className={cn(
+                  !cardTitleValid &&
+                    "border-destructive focus-visible:ring-destructive/40",
+                )}
+              />
+              <FieldHint
+                valid={cardTitleValid}
+                message={`${cardTitleLength}/${CARD_TITLE_MIN_LENGTH} caracteres mínimos · ${
+                  cardTitleValid ? "mínimo atingido" : "mínimo pendente"
+                }`}
+              />
+              {!cardTitleValid && (
+                <p className="text-xs leading-relaxed text-destructive">
+                  Informe um título com pelo menos {CARD_TITLE_MIN_LENGTH} caracteres.
+                </p>
+              )}
+            </div>
           </FormField>
 
           <FormField
@@ -1892,8 +1939,12 @@ function MediaStep({
             <CircleAlert className="h-4 w-4" />
             <AlertTitle>Card e mídia incompletos</AlertTitle>
             <AlertDescription>
-              Revise título, textos mínimos, URL complementar e imagem principal antes de seguir
-              para a revisão.
+              <p>Resolva as pendências abaixo antes de seguir para a revisão:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {mediaPendingItems.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
             </AlertDescription>
           </Alert>
         )}
