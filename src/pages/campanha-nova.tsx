@@ -2246,6 +2246,16 @@ function ReviewStep({
   onSelectSubmitError: (item: SubmitErrorItem) => void;
 }) {
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
+  const heroPreviewUrl = useMemo(
+    () => (draft.heroImageFile ? URL.createObjectURL(draft.heroImageFile) : undefined),
+    [draft.heroImageFile],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (heroPreviewUrl) URL.revokeObjectURL(heroPreviewUrl);
+    };
+  }, [heroPreviewUrl]);
 
   return (
     <Card>
@@ -2280,6 +2290,16 @@ function ReviewStep({
         )}
 
         <SubmitErrorAlert submitError={submitError} onSelectItem={onSelectSubmitError} />
+
+        <CampaignPublishedPreview
+          imageUrl={heroPreviewUrl}
+          title={draft.cardTitle}
+          shortText={draft.cardSubtitle || draft.shortDescription}
+          segment={getOptionName(segments, draft.segment)}
+          modality={draft.modality ? modalityLabel[draft.modality] : "Modalidade pendente"}
+          target={formatCurrency(toPositiveNumber(draft.targetAmount))}
+          location={`${draft.city || "Cidade"} / ${draft.state || "UF"}`}
+        />
 
         <div className="grid gap-4 md:grid-cols-2">
           <SummaryCard title="Identificação" icon={Building2}>
@@ -2401,6 +2421,87 @@ function ReviewStep({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function CampaignPublishedPreview({
+  imageUrl,
+  title,
+  shortText,
+  segment,
+  modality,
+  target,
+  location,
+}: {
+  imageUrl?: string;
+  title: string;
+  shortText: string;
+  segment: string;
+  modality: string;
+  target: string;
+  location: string;
+}) {
+  const displayTitle = title.trim() || "Título do card";
+  const displayShortText = shortText.trim() || "Texto curto da campanha";
+
+  return (
+    <section className="space-y-3 rounded-xl border bg-card p-4">
+      <div className="space-y-1">
+        <h3 className="text-base font-semibold text-foreground">Pré-visualização da campanha</h3>
+        <p className="text-sm text-muted-foreground">
+          Confira o enquadramento da imagem principal e o texto que aparece no card antes do envio.
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-background shadow-sm">
+        <div className="relative aspect-video overflow-hidden bg-muted md:aspect-[16/7]">
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={`Prévia da campanha ${displayTitle}`}
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <Image className="h-8 w-8" />
+              <span className="text-sm font-medium">Imagem principal ainda não selecionada</span>
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+          <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium uppercase tracking-wide text-white/80">
+                Como será exibida
+              </p>
+              <p className="truncate text-xl font-bold text-white">{displayTitle}</p>
+            </div>
+            <Badge variant="secondary" className="shrink-0 bg-background/90 text-foreground">
+              {modality}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-lg font-semibold leading-tight text-foreground">{displayTitle}</p>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                {displayShortText}
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0">
+              {segment}
+            </Badge>
+          </div>
+
+          <div className="grid gap-2 border-t pt-3 text-xs text-muted-foreground sm:grid-cols-3">
+            <span>Meta visual: {target}</span>
+            <span>Local: {location}</span>
+            <span>Imagem: corte central com object-cover</span>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
