@@ -29,6 +29,13 @@ import {
   updateAvatar,
   updatePersonalInformation,
 } from "@/services/api";
+import {
+  formatBrazilPhone,
+  formatCpf,
+  isValidCpfShape,
+  isValidPhoneShape,
+  onlyDigits,
+} from "@/utils/br-formatters";
 
 type PersonalForm = {
   full_name: string;
@@ -79,30 +86,6 @@ const MARITAL_STATUS_VALUE_MAP: Record<string, string> = {
 
 const AVATAR_MAX_SIZE = 2 * 1024 * 1024;
 const AVATAR_EXTENSIONS = ["jpg", "jpeg", "png"];
-
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, "");
-}
-
-function formatCpf(value: string) {
-  return onlyDigits(value)
-    .slice(0, 11)
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d)/, "$1.$2")
-    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-}
-
-function formatPhone(value: string) {
-  const rawDigits = onlyDigits(value);
-  const digits = rawDigits.startsWith("55") && rawDigits.length > 11 ? rawDigits.slice(-11) : rawDigits;
-  const limited = digits.slice(0, 11);
-
-  if (limited.length <= 10) {
-    return limited.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
-  }
-
-  return limited.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
-}
 
 function formatRg(value: string) {
   return value.toUpperCase().replace(/[^0-9A-Z.-]/g, "").slice(0, 20);
@@ -202,7 +185,7 @@ export default function PersonalPage() {
           if (d) {
             setData({
               full_name: typeof d.full_name === "string" ? d.full_name : "",
-              phone: typeof d.phone === "string" ? formatPhone(d.phone) : "",
+              phone: typeof d.phone === "string" ? formatBrazilPhone(d.phone) : "",
               gender: normalizeGender(d.gender),
               cpf: typeof d.cpf === "string" ? formatCpf(d.cpf) : "",
               rg: typeof d.rg === "string" ? d.rg : "",
@@ -372,10 +355,20 @@ export default function PersonalPage() {
           <Field label="Telefone">
             <Input
               value={data.phone}
-              onChange={(e) => upd({ phone: formatPhone(e.target.value) })}
+              onChange={(e) => upd({ phone: formatBrazilPhone(e.target.value) })}
               placeholder="(11) 99999-9999"
               inputMode="tel"
             />
+            {data.phone && (
+              <FieldHint
+                valid={isValidPhoneShape(data.phone)}
+                message={
+                  isValidPhoneShape(data.phone)
+                    ? "Telefone completo."
+                    : `${onlyDigits(data.phone).length}/11 dígitos. Informe DDD e número.`
+                }
+              />
+            )}
           </Field>
           <Field label="CPF">
             <Input
@@ -384,6 +377,16 @@ export default function PersonalPage() {
               placeholder="000.000.000-00"
               inputMode="numeric"
             />
+            {data.cpf && (
+              <FieldHint
+                valid={isValidCpfShape(data.cpf)}
+                message={
+                  isValidCpfShape(data.cpf)
+                    ? "CPF completo."
+                    : `${onlyDigits(data.cpf).length}/11 dígitos.`
+                }
+              />
+            )}
           </Field>
           <Field label="RG">
             <Input value={data.rg} onChange={(e) => upd({ rg: formatRg(e.target.value) })} />
@@ -508,5 +511,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       <Label className="text-xs text-muted-foreground uppercase tracking-wide">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function FieldHint({ valid, message }: { valid: boolean; message: string }) {
+  return (
+    <p className={`text-xs leading-relaxed ${valid ? "text-emerald-700" : "text-destructive"}`}>
+      {message}
+    </p>
   );
 }

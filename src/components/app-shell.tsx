@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
 import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -14,6 +15,23 @@ const nav = [
   { to: "/app/documentos", label: "Documentos", icon: FileCheck2 },
   { to: "/app/campanhas", label: "Campanhas", icon: Megaphone },
 ] as const;
+
+function SidebarLogo({ className }: { className?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!appLogoUrl || failed) {
+    return <span className={cn("text-xl font-bold tracking-normal text-primary", className)}>LOOR</span>;
+  }
+
+  return (
+    <img
+      src={appLogoUrl}
+      alt={appLogoAlt}
+      className={cn("w-auto object-contain", className)}
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 export function AppShell() {
   const navigate = useNavigate();
@@ -37,7 +55,7 @@ export function AppShell() {
     <div className="min-h-screen flex bg-background">
       <aside className="hidden md:flex w-64 flex-col border-r border-border bg-card">
         <div className="h-20 flex items-center px-6 border-b border-border">
-          <img src={appLogoUrl} alt={appLogoAlt} className="h-14 w-auto max-w-[160px] object-contain" />
+          <SidebarLogo className="h-14 max-w-[160px]" />
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {nav.map((item) => {
@@ -85,7 +103,7 @@ export function AppShell() {
       <div className="flex-1 flex flex-col min-w-0">
         <header className="md:hidden h-16 border-b border-border flex items-center justify-between px-4 bg-card">
           <div className="flex items-center gap-2 font-semibold">
-            <img src={appLogoUrl} alt={appLogoAlt} className="h-10 w-auto max-w-[140px] object-contain" />
+            <SidebarLogo className="h-10 max-w-[140px]" />
           </div>
           <Button variant="ghost" size="sm" onClick={handleSignOut}><LogOut className="w-4 h-4" /></Button>
         </header>

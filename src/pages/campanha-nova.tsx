@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -48,6 +48,20 @@ import {
 } from "@/components/campaign-launch-guard";
 import { cn } from "@/lib/utils";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
+import { lookupCep } from "@/utils/brasil-api";
+import {
+  formatAccountDigit,
+  formatAgency,
+  formatBankAccount,
+  formatCep,
+  formatCnpj,
+  formatCpf,
+  formatDecimalInput,
+  isValidCepShape,
+  normalizePixKeyByType,
+  onlyDigits,
+  parseMoneyToNumber,
+} from "@/utils/br-formatters";
 import {
   createOpportunity,
   getBanks,
@@ -429,10 +443,6 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, "");
-}
-
 function getDataArray(response: unknown): ReferenceOption[] {
   if (!response || typeof response !== "object") return [];
 
@@ -483,9 +493,7 @@ function isValidWhatsAppGroupUrl(value: string) {
 }
 
 function toPositiveNumber(value: string) {
-  const normalized = value.replace(/\./g, "").replace(",", ".");
-  const numeric = Number.parseFloat(normalized);
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+  return parseMoneyToNumber(value);
 }
 
 function toInteger(value: string) {
@@ -496,37 +504,6 @@ function toInteger(value: string) {
 
 function formatCurrency(value: number) {
   return currencyFormatter.format(value || 0);
-}
-
-function formatDocument(value: string, type: DocumentType) {
-  const digits = onlyDigits(value).slice(0, type === "cnpj" ? 14 : 11);
-
-  if (type === "cpf") {
-    return digits
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
-  }
-
-  return digits
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2");
-}
-
-function formatCnpj(value: string) {
-  return formatDocument(value, "cnpj");
-}
-
-function formatCpf(value: string) {
-  return formatDocument(value, "cpf");
-}
-
-function formatZipCode(value: string) {
-  return onlyDigits(value)
-    .slice(0, 8)
-    .replace(/(\d{5})(\d)/, "$1-$2");
 }
 
 function isValidDocument(value: string, type: DocumentType) {
@@ -589,16 +566,7 @@ async function uploadCampaignImage(file: File, folder: "opportunities/banner" | 
 }
 
 function normalizePixKey(type: string, value: string) {
-  const trimmed = value.trim();
-
-  if (type === "cpf" || type === "cnpj") return onlyDigits(trimmed);
-  if (type === "phone") {
-    const digits = onlyDigits(trimmed);
-    return digits.startsWith("55") ? `+${digits}` : `+55${digits}`;
-  }
-  if (type === "email") return trimmed.toLowerCase();
-
-  return trimmed.toLowerCase();
+  return normalizePixKeyByType(type, value);
 }
 
 function isValidPix(type: string, value: string) {
@@ -678,7 +646,7 @@ function getDraftValidation(
 
   const operationsValid =
     fieldHasText(draft.teamMembers, 10) &&
-    fieldHasText(draft.zipCode, 9) &&
+    isValidCepShape(draft.zipCode) &&
     UF_OPTIONS.includes(draft.state) &&
     fieldHasText(draft.city, 2) &&
     fieldHasText(draft.street, 3) &&
@@ -963,6 +931,68 @@ function FieldHint({ valid, message }: { valid: boolean; message: string }) {
       {message}
     </p>
   );
+}
+
+function getDocumentHint(value: string, type: DocumentType, label: string) {
+  const digits = onlyDigits(value).length;
+  const expected = type === "cnpj" ? 14 : 11;
+  const valid = digits === expected;
+
+  if (!digits) return null;
+
+  return (
+    <FieldHint
+      valid={valid}
+      message={
+        valid
+          ? `${label} completo.`
+          : `${label} incompleto: ${digits}/${expected} dígitos.`
+      }
+    />
+  );
+}
+
+function getMoneyHint(value: string, label: string, minValue = 100) {
+  const amount = toPositiveNumber(value);
+
+  if (!value.trim()) return null;
+
+  return (
+    <FieldHint
+      valid={amount >= minValue}
+      message={
+        amount >= minValue
+          ? `${label}: ${formatCurrency(amount)}.`
+          : `${label} deve ser maior ou igual a ${formatCurrency(minValue)}.`
+      }
+    />
+  );
+}
+
+function formatPixDraftValue(type: string, value: string) {
+  if (type === "cpf") return formatCpf(value);
+  if (type === "cnpj") return formatCnpj(value);
+  if (type === "phone") {
+    const digits = onlyDigits(value);
+    const localDigits = digits.startsWith("55") && digits.length > 11 ? digits.slice(-11) : digits;
+
+    return localDigits
+      .slice(0, 11)
+      .replace(/^(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{5})(\d)/, "$1-$2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+
+  return value.trimStart().slice(0, type === "random" ? 36 : 120);
+}
+
+function formatAllowedCpfList(value: string) {
+  return value
+    .split(/[,;\n]/)
+    .map((item) => formatCpf(item))
+    .filter(Boolean)
+    .join(", ")
+    .slice(0, 240);
 }
 
 function ImagePreviewCard({
@@ -1299,6 +1329,7 @@ function BasicsStep({
                 {companyCnpjError.message}
               </p>
             )}
+            {getDocumentHint(draft.documentNumber, "cnpj", "CNPJ da empresa")}
           </FormField>
 
           <FormField id="responsibleCpf" label="CPF do responsável">
@@ -1309,6 +1340,7 @@ function BasicsStep({
               placeholder="000.000.000-00"
               inputMode="numeric"
             />
+            {getDocumentHint(draft.responsibleCpf, "cpf", "CPF do responsável")}
           </FormField>
 
           <FormField id="speCnpj" label="CNPJ da SPE">
@@ -1324,6 +1356,7 @@ function BasicsStep({
             {speCnpjError && (
               <p className="text-xs leading-relaxed text-destructive">{speCnpjError.message}</p>
             )}
+            {getDocumentHint(draft.speCnpj, "cnpj", "CNPJ da SPE")}
           </FormField>
         </div>
 
@@ -1460,9 +1493,19 @@ function FinancialStep({
                 id="profitability"
                 inputMode="decimal"
                 value={draft.profitability}
-                onChange={(event) => onPatch({ profitability: event.target.value })}
+                onChange={(event) => onPatch({ profitability: formatDecimalInput(event.target.value) })}
                 placeholder="Ex.: 14,5"
               />
+              {draft.profitability.trim() && (
+                <FieldHint
+                  valid={toPositiveNumber(draft.profitability) > 0}
+                  message={
+                    toPositiveNumber(draft.profitability) > 0
+                      ? "Rentabilidade informada."
+                      : "Informe uma rentabilidade maior que zero."
+                  }
+                />
+              )}
             </FormField>
 
             <FormField id="installments" label="Parcelas">
@@ -1507,9 +1550,23 @@ function FinancialStep({
               id="equityPercentage"
               inputMode="decimal"
               value={draft.equityPercentage}
-              onChange={(event) => onPatch({ equityPercentage: event.target.value })}
+              onChange={(event) => onPatch({ equityPercentage: formatDecimalInput(event.target.value) })}
               placeholder="Ex.: 12,5"
             />
+            {draft.equityPercentage.trim() && (
+              <FieldHint
+                valid={
+                  toPositiveNumber(draft.equityPercentage) > 0 &&
+                  toPositiveNumber(draft.equityPercentage) <= 100
+                }
+                message={
+                  toPositiveNumber(draft.equityPercentage) > 0 &&
+                  toPositiveNumber(draft.equityPercentage) <= 100
+                    ? "Participação dentro do intervalo permitido."
+                    : "Informe um percentual maior que 0 e menor ou igual a 100."
+                }
+              />
+            )}
           </FormField>
         )}
 
@@ -1566,9 +1623,10 @@ function TargetStep({
               id="targetAmount"
               inputMode="decimal"
               value={draft.targetAmount}
-              onChange={(event) => onPatch({ targetAmount: event.target.value })}
+              onChange={(event) => onPatch({ targetAmount: formatDecimalInput(event.target.value) })}
               placeholder="Ex.: 500000"
             />
+            {getMoneyHint(draft.targetAmount, "Meta")}
           </FormField>
 
           <FormField id="shareValue" label="Valor por cota">
@@ -1576,9 +1634,10 @@ function TargetStep({
               id="shareValue"
               inputMode="decimal"
               value={draft.shareValue}
-              onChange={(event) => onPatch({ shareValue: event.target.value })}
+              onChange={(event) => onPatch({ shareValue: formatDecimalInput(event.target.value) })}
               placeholder="Ex.: 1000"
             />
+            {getMoneyHint(draft.shareValue, "Valor por cota")}
           </FormField>
         </div>
 
@@ -1625,6 +1684,70 @@ function OperationsStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
+  const lastRequestedCepRef = useRef("");
+  const draftRef = useRef(draft);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    const digits = onlyDigits(draft.zipCode);
+
+    if (digits.length === 0) {
+      lastRequestedCepRef.current = "";
+      setCepStatus("idle");
+      return;
+    }
+
+    if (digits.length < 8) {
+      lastRequestedCepRef.current = "";
+      setCepStatus("missing");
+      return;
+    }
+
+    if (lastRequestedCepRef.current === digits) return;
+
+    lastRequestedCepRef.current = digits;
+
+    const controller = new AbortController();
+    const currentDraft = draftRef.current;
+    const snapshot = {
+      state: currentDraft.state,
+      city: currentDraft.city,
+      district: currentDraft.district,
+      street: currentDraft.street,
+    };
+
+    setCepStatus("loading");
+
+    lookupCep(digits, controller.signal)
+      .then((result) => {
+        if (!result) {
+          setCepStatus("error");
+          return;
+        }
+
+        const patch: Partial<CampaignDraft> = {};
+
+        if (!snapshot.state && result.state) patch.state = result.state;
+        if (!snapshot.city && result.city) patch.city = result.city;
+        if (!snapshot.district && result.neighborhood) patch.district = result.neighborhood;
+        if (!snapshot.street && result.street) patch.street = result.street;
+
+        if (Object.keys(patch).length > 0) onPatch(patch);
+        setCepStatus("found");
+      })
+      .catch((error) => {
+        if ((error as { name?: string }).name !== "AbortError") {
+          setCepStatus("error");
+        }
+      });
+
+    return () => controller.abort();
+  }, [draft.zipCode, onPatch]);
+
   return (
     <Card>
       <CardHeader>
@@ -1684,9 +1807,25 @@ function OperationsStep({
             <Input
               id="zipCode"
               value={draft.zipCode}
-              onChange={(event) => onPatch({ zipCode: formatZipCode(event.target.value) })}
+              onChange={(event) => onPatch({ zipCode: formatCep(event.target.value) })}
               placeholder="00000-000"
+              inputMode="numeric"
+              aria-invalid={cepStatus === "missing"}
             />
+            {cepStatus === "missing" && (
+              <FieldHint
+                valid={false}
+                message={`${onlyDigits(draft.zipCode).length}/8 dígitos. Complete o CEP para buscar o endereço.`}
+              />
+            )}
+            {cepStatus === "loading" && <FieldHint valid message="Buscando endereço na BrasilAPI..." />}
+            {cepStatus === "found" && <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />}
+            {cepStatus === "error" && (
+              <FieldHint
+                valid={false}
+                message="Não foi possível consultar o CEP agora. Você pode preencher o endereço manualmente."
+              />
+            )}
           </FormField>
           <FormField id="state" label="UF">
             <Select value={draft.state} onValueChange={(state) => onPatch({ state })}>
@@ -1799,28 +1938,46 @@ function BankingStep({
             <Input
               id="agency"
               value={draft.agency}
-              onChange={(event) => onPatch({ agency: onlyDigits(event.target.value).slice(0, 4) })}
+              onChange={(event) => onPatch({ agency: formatAgency(event.target.value) })}
               placeholder="0001"
               inputMode="numeric"
+              maxLength={4}
             />
+            {draft.agency && (
+              <FieldHint
+                valid={onlyDigits(draft.agency).length === 4}
+                message={`${onlyDigits(draft.agency).length}/4 dígitos.`}
+              />
+            )}
           </FormField>
           <FormField id="account" label="Conta">
             <Input
               id="account"
               value={draft.account}
-              onChange={(event) => onPatch({ account: onlyDigits(event.target.value).slice(0, 16) })}
+              onChange={(event) => onPatch({ account: formatBankAccount(event.target.value) })}
               placeholder="000000"
               inputMode="numeric"
+              maxLength={16}
             />
+            {draft.account && (
+              <FieldHint
+                valid={onlyDigits(draft.account).length >= 5 && onlyDigits(draft.account).length <= 16}
+                message={`${onlyDigits(draft.account).length}/16 dígitos. Mínimo de 5.`}
+              />
+            )}
           </FormField>
           <FormField id="accountDigit" label="Dígito">
             <Input
               id="accountDigit"
               value={draft.accountDigit}
-              onChange={(event) => onPatch({ accountDigit: onlyDigits(event.target.value).slice(0, 1) })}
+              onChange={(event) => onPatch({ accountDigit: formatAccountDigit(event.target.value) })}
               placeholder="0"
               inputMode="numeric"
+              maxLength={1}
             />
+            {draft.accountDigit && (
+              <FieldHint valid={onlyDigits(draft.accountDigit).length === 1} message="Dígito informado." />
+            )}
           </FormField>
         </div>
 
@@ -1843,7 +2000,9 @@ function BankingStep({
             <Input
               id="pixKey"
               value={draft.pixKey}
-              onChange={(event) => onPatch({ pixKey: event.target.value })}
+              onChange={(event) =>
+                onPatch({ pixKey: formatPixDraftValue(draft.pixType, event.target.value) })
+              }
               placeholder="chave-sintetica@example.test"
             />
             {draft.pixKey.trim() && (
@@ -1897,7 +2056,7 @@ function BankingStep({
             <Textarea
               id="allowedCpfs"
               value={draft.allowedCpfs}
-              onChange={(event) => onPatch({ allowedCpfs: event.target.value })}
+              onChange={(event) => onPatch({ allowedCpfs: formatAllowedCpfList(event.target.value) })}
               placeholder="000.000.000-00, 111.111.111-11"
             />
           </FormField>
@@ -2597,10 +2756,10 @@ export default function CampaignCreatePage() {
     };
   }, []);
 
-  const patchDraft = (patch: Partial<CampaignDraft>) => {
+  const patchDraft = useCallback((patch: Partial<CampaignDraft>) => {
     setDraft((current) => ({ ...current, ...patch }));
     setSubmitError(null);
-  };
+  }, []);
 
   const resetPreview = () => {
     setPreviewWizard(false);

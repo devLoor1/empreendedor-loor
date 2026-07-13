@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { Building2, CheckCircle2, CircleAlert, Loader2, Search } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,16 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { getAddress, saveAddress } from "@/services/api";
+import { lookupCep, lookupCnpjInfo } from "@/utils/brasil-api";
+import {
+  formatBrazilPhone,
+  formatCep,
+  formatCnpj,
+  isValidCepShape,
+  isValidCnpjShape,
+  isValidPhoneShape,
+  onlyDigits,
+} from "@/utils/br-formatters";
 
 type AddressForm = {
   country_id: number;
@@ -90,36 +100,6 @@ const UF_OPTIONS = [
   "SE",
   "TO",
 ];
-
-function onlyDigits(value: string) {
-  return value.replace(/\D/g, "");
-}
-
-function formatCnpj(value: string) {
-  const digits = onlyDigits(value).slice(0, 14);
-
-  return digits
-    .replace(/^(\d{2})(\d)/, "$1.$2")
-    .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-    .replace(/\.(\d{3})(\d)/, ".$1/$2")
-    .replace(/(\d{4})(\d)/, "$1-$2");
-}
-
-function formatPhone(value: string) {
-  const digits = onlyDigits(value).slice(0, 11);
-
-  if (digits.length <= 10) {
-    return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
-  }
-
-  return digits.replace(/^(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
-}
-
-function formatZipCode(value: string) {
-  return onlyDigits(value)
-    .slice(0, 8)
-    .replace(/(\d{5})(\d)/, "$1-$2");
-}
 
 function isValidCnpj(value: string) {
   const digits = onlyDigits(value);
@@ -203,7 +183,11 @@ export default function CompanyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [companyChecked, setCompanyChecked] = useState(false);
+  const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
   const [companyNotice, setCompanyNotice] = useState<CompanyNotice | null>(null);
+  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
+  const lastRequestedCepRef = useRef("");
+  const addressRef = useRef(address);
 
   const cnpjIsFilled = onlyDigits(company.cnpj).length > 0;
   const cnpjIsValid = isValidCnpj(company.cnpj);
@@ -222,6 +206,65 @@ export default function CompanyPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    addressRef.current = address;
+  }, [address]);
+
+  useEffect(() => {
+    const digits = onlyDigits(address.zip_code);
+
+    if (digits.length === 0) {
+      lastRequestedCepRef.current = "";
+      setCepStatus("idle");
+      return;
+    }
+
+    if (digits.length < 8) {
+      lastRequestedCepRef.current = "";
+      setCepStatus("missing");
+      return;
+    }
+
+    if (lastRequestedCepRef.current === digits) return;
+
+    lastRequestedCepRef.current = digits;
+
+    const controller = new AbortController();
+    const currentAddress = addressRef.current;
+    const snapshot = {
+      state: currentAddress.state,
+      city: currentAddress.city,
+      district: currentAddress.district,
+      street_name: currentAddress.street_name,
+    };
+
+    setCepStatus("loading");
+
+    lookupCep(digits, controller.signal)
+      .then((result) => {
+        if (!result) {
+          setCepStatus("error");
+          return;
+        }
+
+        setAddress((current) => ({
+          ...current,
+          state: snapshot.state || result.state || current.state,
+          city: snapshot.city || result.city || current.city,
+          district: snapshot.district || result.neighborhood || current.district,
+          street_name: snapshot.street_name || result.street || current.street_name,
+        }));
+        setCepStatus("found");
+      })
+      .catch((error) => {
+        if ((error as { name?: string }).name !== "AbortError") {
+          setCepStatus("error");
+        }
+      });
+
+    return () => controller.abort();
+  }, [address.zip_code]);
+
   const updAddress = (patch: Partial<AddressForm>) => {
     setSaved(false);
     setAddress((current) => ({ ...current, ...patch }));
@@ -236,7 +279,7 @@ export default function CompanyPage() {
     }
   };
 
-  const handleValidateCompany = () => {
+  const handleValidateCompany = async () => {
     if (!cnpjIsFilled) {
       setCompanyChecked(false);
       setCompanyNotice({
@@ -258,17 +301,50 @@ export default function CompanyPage() {
       return;
     }
 
-    setCompanyChecked(true);
-    setCompanyNotice({
-      kind: "info",
-      title: "CNPJ validado localmente",
-      description:
-        "A consulta automática e a persistência dos dados empresariais ainda não estão expostas no contrato backend atual. Os campos abaixo servem como revisão segura nesta etapa.",
-    });
+    setCompanyLookupLoading(true);
+
+    try {
+      const result = await lookupCnpjInfo(company.cnpj);
+
+      if (result) {
+        setCompany((current) => ({
+          ...current,
+          legal_name: current.legal_name || result.razao_social || "",
+          trade_name: current.trade_name || result.nome_fantasia || "",
+          phone: current.phone || formatBrazilPhone(result.ddd_telefone_1 || ""),
+          email: current.email || result.email || "",
+        }));
+        setCompanyNotice({
+          kind: "info",
+          title: "CNPJ encontrado na BrasilAPI",
+          description:
+            "Dados disponíveis foram sugeridos em campos vazios. A validação operacional continua dependendo do backend/processo.",
+        });
+      } else {
+        setCompanyNotice({
+          kind: "info",
+          title: "CNPJ validado localmente",
+          description:
+            "A BrasilAPI não retornou dados agora. Isso não bloqueia o fluxo; revise os campos manualmente.",
+        });
+      }
+
+      setCompanyChecked(true);
+    } catch {
+      setCompanyChecked(true);
+      setCompanyNotice({
+        kind: "info",
+        title: "CNPJ validado localmente",
+        description:
+          "Não foi possível consultar a BrasilAPI agora. Isso não bloqueia o fluxo; revise os campos manualmente.",
+      });
+    } finally {
+      setCompanyLookupLoading(false);
+    }
   };
 
   const handleSave = async () => {
-    if (!address.zip_code || !address.street_name || !address.city || !address.state) {
+    if (!isValidCepShape(address.zip_code) || !address.street_name || !address.city || !address.state) {
       return toast.error("Preencha CEP, logradouro, cidade e estado");
     }
     setSaving(true);
@@ -352,11 +428,25 @@ export default function CompanyPage() {
               aria-invalid={cnpjIsFilled && !cnpjIsValid}
             />
           </Field>
-          <Button type="button" variant="outline" onClick={handleValidateCompany}>
-            <Search className="w-4 h-4" />
-            Validar CNPJ
+          <Button type="button" variant="outline" onClick={handleValidateCompany} disabled={companyLookupLoading}>
+            {companyLookupLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Search className="w-4 h-4" />
+            )}
+            {companyLookupLoading ? "Consultando..." : "Validar CNPJ"}
           </Button>
         </div>
+        {company.cnpj && (
+          <FieldHint
+            valid={isValidCnpjShape(company.cnpj)}
+            message={
+              isValidCnpjShape(company.cnpj)
+                ? "CNPJ completo para consulta auxiliar."
+                : `${onlyDigits(company.cnpj).length}/14 dígitos.`
+            }
+          />
+        )}
 
         {companyNotice && (
           <Alert
@@ -387,10 +477,20 @@ export default function CompanyPage() {
           <Field label="Telefone">
             <Input
               value={company.phone}
-              onChange={(e) => updCompany({ phone: formatPhone(e.target.value) })}
+              onChange={(e) => updCompany({ phone: formatBrazilPhone(e.target.value) })}
               placeholder="(00) 00000-0000"
               inputMode="tel"
             />
+            {company.phone && (
+              <FieldHint
+                valid={isValidPhoneShape(company.phone)}
+                message={
+                  isValidPhoneShape(company.phone)
+                    ? "Telefone completo."
+                    : `${onlyDigits(company.phone).length}/11 dígitos.`
+                }
+              />
+            )}
           </Field>
           <Field label="E-mail">
             <Input
@@ -432,10 +532,25 @@ export default function CompanyPage() {
           <Field label="CEP">
             <Input
               value={address.zip_code}
-              onChange={(e) => updAddress({ zip_code: formatZipCode(e.target.value) })}
+              onChange={(e) => updAddress({ zip_code: formatCep(e.target.value) })}
               placeholder="00000-000"
               inputMode="numeric"
+              aria-invalid={cepStatus === "missing"}
             />
+            {cepStatus === "missing" && (
+              <FieldHint
+                valid={false}
+                message={`${onlyDigits(address.zip_code).length}/8 dígitos. Complete o CEP para buscar o endereço.`}
+              />
+            )}
+            {cepStatus === "loading" && <FieldHint valid message="Buscando endereço na BrasilAPI..." />}
+            {cepStatus === "found" && <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />}
+            {cepStatus === "error" && (
+              <FieldHint
+                valid={false}
+                message="Não foi possível consultar o CEP agora. Preencha o endereço manualmente."
+              />
+            )}
           </Field>
           <Field label="Logradouro" className="sm:col-span-2">
             <Input
@@ -514,5 +629,13 @@ function Field({
       <Label className="text-xs text-muted-foreground uppercase tracking-wide">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function FieldHint({ valid, message }: { valid: boolean; message: string }) {
+  return (
+    <p className={`text-xs leading-relaxed ${valid ? "text-emerald-700" : "text-destructive"}`}>
+      {message}
+    </p>
   );
 }
