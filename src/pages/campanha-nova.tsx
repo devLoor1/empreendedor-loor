@@ -46,6 +46,7 @@ import {
   CampaignCreationStatusCard,
   CampaignPrerequisiteList,
 } from "@/components/campaign-launch-guard";
+import { FileUploadCard, SelectedFileCard } from "@/components/upload/file-upload-card";
 import { cn } from "@/lib/utils";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
@@ -62,6 +63,12 @@ import {
   onlyDigits,
   parseMoneyToNumber,
 } from "@/utils/br-formatters";
+import {
+  formatUploadSize,
+  getUploadAccept,
+  normalizeUploadFilename,
+  validateUploadFile,
+} from "@/utils/upload-validation";
 import {
   createOpportunity,
   getBanks,
@@ -510,48 +517,22 @@ function isValidDocument(value: string, type: DocumentType) {
   return onlyDigits(value).length === (type === "cnpj" ? 14 : 11);
 }
 
-function normalizeImageFilename(file: File) {
-  const dotIndex = file.name.lastIndexOf(".");
-
-  if (dotIndex <= 0) return file;
-
-  const base = file.name.slice(0, dotIndex);
-  const extension = file.name.slice(dotIndex + 1).toLowerCase();
-  const normalizedName = `${base}.${extension}`;
-
-  if (normalizedName === file.name) return file;
-
-  return new File([file], normalizedName, { type: file.type, lastModified: file.lastModified });
-}
-
 function validateImage(file: File) {
-  const normalized = normalizeImageFilename(file);
-  const extension = normalized.name.split(".").pop()?.toLowerCase() || "";
-
-  if (!IMAGE_EXTENSIONS.includes(extension)) {
-    return { file: null, error: "Use uma imagem PNG, JPG ou JPEG." };
-  }
-
-  if (normalized.size > IMAGE_MAX_SIZE) {
-    return { file: null, error: "A imagem deve ter até 2 MB." };
-  }
-
-  return { file: normalized, error: null };
-}
-
-function formatFileSize(size: number) {
-  if (size >= 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-
-  return `${Math.max(1, Math.round(size / 1024))} KB`;
+  return validateUploadFile(file, {
+    allowedExtensions: IMAGE_EXTENSIONS,
+    maxSizeBytes: IMAGE_MAX_SIZE,
+    invalidTypeMessage: "Use uma imagem PNG, JPG ou JPEG.",
+    maxSizeMessage: "A imagem deve ter até 2 MB.",
+  });
 }
 
 function getImageFileSummary(file: File) {
-  return `${file.name} · ${formatFileSize(file.size)}`;
+  return `${file.name} · ${formatUploadSize(file.size)}`;
 }
 
 async function uploadCampaignImage(file: File, folder: "opportunities/banner" | "opportunities/extra_images") {
   const formData = new FormData();
-  formData.append("image", normalizeImageFilename(file));
+  formData.append("image", normalizeUploadFilename(file));
   formData.append("folder", folder);
 
   const response = await uploadImage(formData);
@@ -993,42 +974,6 @@ function formatAllowedCpfList(value: string) {
     .filter(Boolean)
     .join(", ")
     .slice(0, 240);
-}
-
-function ImagePreviewCard({
-  file,
-  previewUrl,
-  onRemove,
-}: {
-  file: File;
-  previewUrl?: string;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
-      {previewUrl ? (
-        <img
-          src={previewUrl}
-          alt=""
-          className="h-14 w-14 shrink-0 rounded-md border object-cover"
-        />
-      ) : (
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md border bg-muted">
-          <Image className="h-5 w-5 text-muted-foreground" />
-        </div>
-      )}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-foreground">{file.name}</p>
-        <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
-        <p className="mt-1 text-xs text-emerald-700">Pronta para envio</p>
-      </div>
-      {onRemove && (
-        <Button type="button" variant="outline" size="sm" onClick={onRemove}>
-          Remover
-        </Button>
-      )}
-    </div>
-  );
 }
 
 function StepActions({
@@ -2095,6 +2040,9 @@ function MediaStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
+  const [heroUploadError, setHeroUploadError] = useState<string | null>(null);
+  const [extraUploadError, setExtraUploadError] = useState<string | null>(null);
+  const extraImageInputRef = useRef<HTMLInputElement | null>(null);
   const heroPreviewUrl = useMemo(
     () => (draft.heroImageFile ? URL.createObjectURL(draft.heroImageFile) : undefined),
     [draft.heroImageFile],
@@ -2123,19 +2071,19 @@ function MediaStep({
     };
   }, [extraPreviewUrls]);
 
-  const handleHeroImage = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-
+  const handleHeroImageFile = (file: File | undefined) => {
     if (!file) return;
 
     const result = validateImage(file);
 
     if (!result.file) {
-      toast.error(result.error);
+      const message = result.error || "Não foi possível usar esta imagem.";
+      setHeroUploadError(message);
+      toast.error(message);
       return;
     }
 
+    setHeroUploadError(null);
     onPatch({ heroImageFile: result.file });
   };
 
@@ -2146,22 +2094,36 @@ function MediaStep({
     if (files.length === 0) return;
 
     const accepted: File[] = [];
+    const errors: string[] = [];
 
     for (const file of files.slice(0, 3)) {
       const result = validateImage(file);
 
       if (!result.file) {
-        toast.error(`${file.name}: ${result.error}`);
+        errors.push(`${file.name}: ${result.error}`);
         continue;
       }
 
       accepted.push(result.file);
     }
 
-    onPatch({ extraImageFiles: accepted });
+    if (files.length > 3) {
+      errors.push("Selecione no máximo 3 imagens extras por vez.");
+    }
+
+    setExtraUploadError(errors[0] || null);
+
+    if (errors.length > 0) {
+      toast.error(errors[0]);
+    }
+
+    if (accepted.length > 0) {
+      onPatch({ extraImageFiles: accepted });
+    }
   };
 
   const removeExtraImage = (fileName: string) => {
+    setExtraUploadError(null);
     onPatch({
       extraImageFiles: draft.extraImageFiles.filter((file) => file.name !== fileName),
     });
@@ -2226,34 +2188,25 @@ function MediaStep({
           label="Arquivo da imagem principal"
           hint="Obrigatório para criar a oportunidade. PNG/JPG até 2 MB; extensão final normalizada para lowercase."
         >
-          <div className="space-y-3">
-            <Input
-              id="heroImageFile"
-              type="file"
-              accept=".png,.jpg,.jpeg"
-              onChange={handleHeroImage}
-              className="sr-only"
-            />
-            <Label
-              htmlFor="heroImageFile"
-              className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 p-5 text-center transition-colors hover:border-primary/70"
-            >
-              <Image className="mb-2 h-6 w-6 text-primary" />
-              <span className="font-medium text-foreground">
-                {draft.heroImageFile ? "Trocar imagem principal" : "Selecionar imagem principal"}
-              </span>
-              <span className="mt-1 text-xs text-muted-foreground">PNG, JPG ou JPEG até 2 MB</span>
-            </Label>
-            {draft.heroImageFile ? (
-              <ImagePreviewCard
-                file={draft.heroImageFile}
-                previewUrl={heroPreviewUrl}
-                onRemove={() => onPatch({ heroImageFile: null })}
-              />
-            ) : (
-              <FieldHint valid={false} message="Imagem principal obrigatória para criar." />
-            )}
-          </div>
+          <FileUploadCard
+            id="heroImageFile"
+            accept={getUploadAccept(IMAGE_EXTENSIONS)}
+            title="Selecionar imagem principal"
+            description="PNG, JPG ou JPEG até 2 MB. A imagem só é enviada no envio final."
+            file={draft.heroImageFile}
+            previewUrl={heroPreviewUrl}
+            imageAlt="Prévia da imagem principal da campanha"
+            error={heroUploadError}
+            status="Imagem pronta para o envio final"
+            onFile={handleHeroImageFile}
+            onRemove={() => {
+              setHeroUploadError(null);
+              onPatch({ heroImageFile: null });
+            }}
+          />
+          {!draft.heroImageFile && !heroUploadError && (
+            <FieldHint valid={false} message="Imagem principal obrigatória para criar." />
+          )}
         </FormField>
 
         <FormField
@@ -2303,29 +2256,46 @@ function MediaStep({
             hint="Opcional. PNG/JPG até 2 MB cada."
           >
             <Input
+              ref={extraImageInputRef}
               id="extraImageFiles"
               type="file"
-              accept=".png,.jpg,.jpeg"
-            multiple
+              accept={`${getUploadAccept(IMAGE_EXTENSIONS)},image/jpeg,image/png`}
+              multiple
               onChange={handleExtraImages}
               className="sr-only"
+              aria-describedby="extraImageFilesHelp"
             />
-            <Label
-              htmlFor="extraImageFiles"
-              className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed bg-muted/30 p-4 text-sm font-medium text-foreground transition-colors hover:border-primary/70"
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => extraImageInputRef.current?.click()}
+              aria-describedby="extraImageFilesHelp"
+              className={cn(
+                "flex h-auto w-full cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-muted/30 p-4 text-center text-sm font-medium text-foreground transition-colors hover:border-primary/70",
+                extraUploadError && "border-destructive/70 bg-destructive/5",
+              )}
             >
-              Selecionar imagens extras
-            </Label>
+              <Image className="mb-2 h-5 w-5 text-primary" />
+              <span>Selecionar imagens extras</span>
+              <span id="extraImageFilesHelp" className="mt-1 text-xs font-normal text-muted-foreground">
+                Até 3 imagens, PNG/JPG/JPEG, 2 MB cada. Selecionar novamente substitui a lista.
+              </span>
+            </Button>
+            {extraUploadError && (
+              <p className="text-xs leading-relaxed text-destructive">{extraUploadError}</p>
+            )}
             {extraPreviewUrls.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
                   {extraPreviewUrls.length} imagem(ns) extra(s) pronta(s) para envio.
                 </p>
                 {extraPreviewUrls.map((item) => (
-                  <ImagePreviewCard
+                  <SelectedFileCard
                     key={`${item.file.name}-${item.file.lastModified}`}
                     file={item.file}
                     previewUrl={item.url}
+                    imageAlt="Prévia de imagem extra da campanha"
+                    status="Imagem extra pronta para o envio final"
                     onRemove={() => removeExtraImage(item.file.name)}
                   />
                 ))}

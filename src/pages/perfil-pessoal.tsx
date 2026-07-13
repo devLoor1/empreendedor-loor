@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Camera, CheckCircle2, Loader2, Upload, UserRound } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { FileUploadCard } from "@/components/upload/file-upload-card";
 import { toast } from "sonner";
 import {
   getMe,
@@ -29,6 +30,7 @@ import {
   updateAvatar,
   updatePersonalInformation,
 } from "@/services/api";
+import { getUploadAccept, validateUploadFile } from "@/utils/upload-validation";
 import {
   formatBrazilPhone,
   formatCpf,
@@ -99,20 +101,6 @@ function normalizeMaritalStatus(value: unknown) {
   return typeof value === "string" ? MARITAL_STATUS_VALUE_MAP[value] ?? "" : "";
 }
 
-function normalizeImageFilename(file: File) {
-  const dotIndex = file.name.lastIndexOf(".");
-
-  if (dotIndex <= 0) return file;
-
-  const base = file.name.slice(0, dotIndex);
-  const extension = file.name.slice(dotIndex + 1).toLowerCase();
-  const normalizedName = `${base}.${extension}`;
-
-  if (normalizedName === file.name) return file;
-
-  return new File([file], normalizedName, { type: file.type, lastModified: file.lastModified });
-}
-
 function getData(response: unknown): Record<string, unknown> | null {
   if (!response || typeof response !== "object") return null;
 
@@ -166,6 +154,8 @@ export default function PersonalPage() {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [avatarNotice, setAvatarNotice] = useState<string | null>(null);
   const [avatarSaving, setAvatarSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -217,29 +207,38 @@ export default function PersonalPage() {
 
   const upd = (patch: Partial<PersonalForm>) => setData((d) => ({ ...d, ...patch }));
 
-  const handleAvatarFile = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = "";
+  const clearAvatarSelection = () => {
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+    setAvatarFile(null);
+    setAvatarPreview("");
+    setAvatarError(null);
+    setAvatarNotice(null);
+  };
 
+  const handleAvatarFileSelected = (file: File | undefined) => {
     if (!file) return;
 
-    const normalizedFile = normalizeImageFilename(file);
-    const extension = normalizedFile.name.split(".").pop()?.toLowerCase() || "";
+    const result = validateUploadFile(file, {
+      allowedExtensions: AVATAR_EXTENSIONS,
+      maxSizeBytes: AVATAR_MAX_SIZE,
+      invalidTypeMessage: "Use uma imagem PNG, JPG ou JPEG.",
+      maxSizeMessage: "A imagem deve ter até 2 MB.",
+    });
 
-    if (!AVATAR_EXTENSIONS.includes(extension)) {
-      toast.error("Use uma imagem PNG, JPG ou JPEG.");
-      return;
-    }
-
-    if (normalizedFile.size > AVATAR_MAX_SIZE) {
-      toast.error("A imagem deve ter até 2 MB.");
+    if (!result.file) {
+      const message = result.error || "Não foi possível usar esta imagem.";
+      setAvatarError(message);
+      setAvatarNotice(null);
+      toast.error(message);
       return;
     }
 
     if (avatarPreview) URL.revokeObjectURL(avatarPreview);
 
-    setAvatarFile(normalizedFile);
-    setAvatarPreview(URL.createObjectURL(normalizedFile));
+    setAvatarFile(result.file);
+    setAvatarPreview(URL.createObjectURL(result.file));
+    setAvatarError(null);
+    setAvatarNotice("Imagem pronta. Clique em Enviar avatar para persistir.");
   };
 
   const handleAvatarUpload = async () => {
@@ -261,10 +260,12 @@ export default function PersonalPage() {
           detail: { avatar: nextAvatar, image_url: nextAvatar },
         }),
       );
-      setAvatarFile(null);
+      clearAvatarSelection();
       setAvatarOpen(false);
       toast.success("Avatar atualizado com sucesso.");
     } catch {
+      setAvatarError("Não foi possível atualizar o avatar.");
+      setAvatarNotice(null);
       toast.error("Não foi possível atualizar o avatar.");
     } finally {
       setAvatarSaving(false);
@@ -469,17 +470,22 @@ export default function PersonalPage() {
                 <UserRound className="h-12 w-12 text-muted-foreground" />
               )}
             </div>
-            <div className="rounded-lg border border-dashed border-border p-4 text-center">
-              <Input
-                type="file"
-                accept=".png,.jpg,.jpeg"
-                onChange={handleAvatarFile}
-                className="mx-auto max-w-sm"
-              />
-              <p className="mt-2 text-xs text-muted-foreground">
-                A extensão final do arquivo é normalizada para lowercase antes do upload.
-              </p>
-            </div>
+            <FileUploadCard
+              id="avatarFile"
+              accept={getUploadAccept(AVATAR_EXTENSIONS)}
+              title="Selecionar avatar"
+              description="PNG, JPG ou JPEG até 2 MB. O upload acontece apenas ao clicar em Enviar avatar."
+              file={avatarFile}
+              previewUrl={avatarPreview}
+              imageAlt="Prévia do avatar selecionado"
+              error={avatarError}
+              status={avatarNotice || "Imagem pronta para envio"}
+              onFile={handleAvatarFileSelected}
+              onRemove={clearAvatarSelection}
+            />
+            <p className="text-xs text-muted-foreground">
+              A extensão final do arquivo é normalizada para lowercase antes do upload.
+            </p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setAvatarOpen(false)}>

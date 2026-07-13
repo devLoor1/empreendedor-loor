@@ -19,15 +19,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { FileUploadCard } from "@/components/upload/file-upload-card";
 import { toast } from "sonner";
 import {
   getEntrepreneurDocuments,
   replaceEntrepreneurDocument,
   uploadEntrepreneurDocument,
 } from "@/services/api";
+import {
+  getUploadAccept,
+  normalizeUploadFilename,
+  validateUploadFile,
+} from "@/utils/upload-validation";
 
 type DocumentType =
   | "social_contract"
@@ -146,26 +151,6 @@ function getDataArray(response: unknown): DocumentRecord[] {
   return Array.isArray(data) ? (data as DocumentRecord[]) : [];
 }
 
-function normalizeFilename(file: File) {
-  const dotIndex = file.name.lastIndexOf(".");
-
-  if (dotIndex <= 0) return file;
-
-  const base = file.name.slice(0, dotIndex);
-  const extension = file.name.slice(dotIndex + 1).toLowerCase();
-  const normalizedName = `${base}.${extension}`;
-
-  if (normalizedName === file.name) return file;
-
-  return new File([file], normalizedName, { type: file.type, lastModified: file.lastModified });
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function formatDate(value?: string) {
   if (!value) return "Data não informada";
 
@@ -182,6 +167,8 @@ export default function DocsPage() {
   const [saving, setSaving] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<DocumentConfig | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const documentsByType = useMemo(
     () => new Map(documents.map((doc) => [doc.type, doc] as const)),
@@ -209,20 +196,24 @@ export default function DocsPage() {
   const handleSelectFile = (file: File | undefined) => {
     if (!file) return;
 
-    const normalizedFile = normalizeFilename(file);
-    const extension = normalizedFile.name.split(".").pop()?.toLowerCase() || "";
+    const result = validateUploadFile(file, {
+      allowedExtensions: ALLOWED_EXTENSIONS,
+      maxSizeBytes: MAX_FILE_SIZE,
+      invalidTypeMessage: "Use PDF, PNG, JPG, JPEG, DOCX ou XLSX.",
+      maxSizeMessage: "O arquivo deve ter até 10 MB.",
+    });
 
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
-      toast.error("Use PDF, PNG, JPG, JPEG, DOCX ou XLSX.");
+    if (!result.file) {
+      const message = result.error || "Não foi possível usar este arquivo.";
+      setUploadError(message);
+      setUploadNotice(null);
+      toast.error(message);
       return;
     }
 
-    if (normalizedFile.size > MAX_FILE_SIZE) {
-      toast.error("O arquivo deve ter até 10 MB.");
-      return;
-    }
-
-    setSelectedFile(normalizedFile);
+    setSelectedFile(result.file);
+    setUploadError(null);
+    setUploadNotice("Arquivo pronto. Confirme o envio para persistir no backend.");
   };
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
@@ -233,6 +224,15 @@ export default function DocsPage() {
   const openUpload = (document: DocumentConfig) => {
     setSelectedDocument(document);
     setSelectedFile(null);
+    setUploadError(null);
+    setUploadNotice(null);
+  };
+
+  const closeUpload = () => {
+    setSelectedDocument(null);
+    setSelectedFile(null);
+    setUploadError(null);
+    setUploadNotice(null);
   };
 
   const handleUpload = async () => {
@@ -243,7 +243,7 @@ export default function DocsPage() {
     try {
       const current = documentsByType.get(selectedDocument.type);
       const formData = new FormData();
-      formData.append("file", selectedFile);
+      formData.append("file", normalizeUploadFilename(selectedFile));
 
       if (current) {
         await replaceEntrepreneurDocument(current.id, formData);
@@ -255,8 +255,12 @@ export default function DocsPage() {
       toast.success(current ? "Documento substituído." : "Documento enviado.");
       setSelectedDocument(null);
       setSelectedFile(null);
+      setUploadError(null);
+      setUploadNotice(null);
       await loadDocuments();
     } catch {
+      setUploadError("Não foi possível enviar o documento.");
+      setUploadNotice(null);
       toast.error("Não foi possível enviar o documento.");
     } finally {
       setSaving(false);
@@ -348,7 +352,7 @@ export default function DocsPage() {
         ))}
       </div>
 
-      <Dialog open={Boolean(selectedDocument)} onOpenChange={(open) => !open && setSelectedDocument(null)}>
+      <Dialog open={Boolean(selectedDocument)} onOpenChange={(open) => !open && closeUpload()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{selectedDocument?.name}</DialogTitle>
@@ -357,32 +361,27 @@ export default function DocsPage() {
             </DialogDescription>
           </DialogHeader>
           <div
-            className="rounded-lg border border-dashed border-border p-6 text-center"
             onDragOver={(event) => event.preventDefault()}
             onDrop={handleDrop}
           >
-            <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium text-foreground">
-              Arraste um arquivo ou selecione pelo campo abaixo
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              PDF, PNG, JPG, JPEG, DOCX ou XLSX até 10 MB.
-            </p>
-            <Input
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx"
-              onChange={(event) => handleSelectFile(event.target.files?.[0])}
-              className="mx-auto mt-4 max-w-sm"
+            <FileUploadCard
+              id="documentUploadFile"
+              accept={getUploadAccept(ALLOWED_EXTENSIONS)}
+              title="Selecionar documento"
+              description="PDF, PNG, JPG, JPEG, DOCX ou XLSX até 10 MB. Também é possível arrastar o arquivo aqui."
+              file={selectedFile}
+              error={uploadError}
+              status={uploadNotice || "Arquivo pronto para envio"}
+              onFile={handleSelectFile}
+              onRemove={() => {
+                setSelectedFile(null);
+                setUploadError(null);
+                setUploadNotice(null);
+              }}
             />
           </div>
-          {selectedFile && (
-            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <p className="font-medium text-foreground">{selectedFile.name}</p>
-              <p className="text-muted-foreground">{formatBytes(selectedFile.size)}</p>
-            </div>
-          )}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setSelectedDocument(null)}>
+            <Button type="button" variant="outline" onClick={closeUpload}>
               Cancelar
             </Button>
             <Button type="button" onClick={handleUpload} disabled={!selectedFile || saving}>
