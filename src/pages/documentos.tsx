@@ -22,6 +22,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileUploadCard } from "@/components/upload/file-upload-card";
+import { EmptyState } from "@/components/empty-state";
 import { toast } from "sonner";
 import {
   getEntrepreneurDocuments,
@@ -327,6 +328,20 @@ export default function DocsPage() {
           </div>
         </div>
       </Card>
+
+      {uploadedCount === 0 && (
+        <EmptyState
+          icon={FileText}
+          title="Nenhum documento anexado"
+          description="Os documentos são opcionais neste fluxo. Use esta área para preparar um dossiê de apoio sem bloquear a criação de campanha."
+          action={
+            <Button type="button" variant="outline" onClick={() => openUpload(DOCUMENTS[0])}>
+              <Upload className="h-4 w-4" />
+              Enviar primeiro documento
+            </Button>
+          }
+        />
+      )}
 
       <div className="space-y-6">
         {grouped.map(({ category, items }) => (

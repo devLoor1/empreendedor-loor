@@ -21,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { EntrepreneurAvatar } from "@/components/entrepreneur-avatar";
 import { FileUploadCard } from "@/components/upload/file-upload-card";
 import { toast } from "sonner";
 import {
@@ -328,12 +328,11 @@ export default function PersonalPage() {
       <Card className="p-6 border-border/60">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
-            <Avatar className="h-20 w-20 border border-border">
-              <AvatarImage src={avatarUrl} alt={data.full_name || "Avatar do empreendedor"} />
-              <AvatarFallback>
-                <UserRound className="h-8 w-8 text-muted-foreground" />
-              </AvatarFallback>
-            </Avatar>
+            <EntrepreneurAvatar
+              src={avatarUrl}
+              name={data.full_name}
+              className="h-20 w-20 shrink-0 text-lg"
+            />
             <div>
               <h2 className="font-semibold text-foreground">Avatar do responsável</h2>
               <p className="mt-1 text-sm text-muted-foreground">

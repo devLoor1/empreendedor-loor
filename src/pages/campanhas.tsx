@@ -4,7 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignCreateButton } from "@/components/campaign-launch-guard";
-import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone, type LucideIcon } from "lucide-react";
 import {
   getActiveOpportunities,
   getReviewOpportunities,
@@ -202,21 +203,18 @@ export default function CampaignsPage() {
       )}
 
       {total === 0 && (
-        <Card className="p-10 text-center border-border/60 space-y-3">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Megaphone className="w-6 h-6 text-primary" />
-            </div>
-          </div>
-          <p className="font-semibold text-foreground">Nenhuma campanha criada ainda</p>
-          <p className="text-sm text-muted-foreground">Complete seu perfil e documentação para lançar sua primeira campanha.</p>
-        </Card>
+        <EmptyState
+          icon={Megaphone}
+          title="Nenhuma campanha criada ainda"
+          description="Sua listagem fica vazia até a primeira oportunidade ser enviada. Use a criação guiada para revisar pré-requisitos e preparar os dados com segurança."
+          action={<CampaignCreateButton />}
+        />
       )}
     </div>
   );
 }
 
-function SectionTitle({ icon: Icon, title, count }: { icon: any; title: string; count: number }) {
+function SectionTitle({ icon: Icon, title, count }: { icon: LucideIcon; title: string; count: number }) {
   return (
     <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
       <Icon className="w-5 h-5" /> {title} <span className="text-muted-foreground font-normal text-sm">({count})</span>

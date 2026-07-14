@@ -1,12 +1,13 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { getHome } from "@/services/api";
 import { useAuth } from "@/hooks/use-auth";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignCreateButton } from "@/components/campaign-launch-guard";
-import { Building2, FileCheck2, Megaphone, TrendingUp, Users, BarChart3 } from "lucide-react";
+import { EmptyState } from "@/components/empty-state";
+import { Building2, FileCheck2, Megaphone, TrendingUp, Users, BarChart3, AlertCircle, type LucideIcon } from "lucide-react";
 
 type Opportunity = {
   name: string;
@@ -56,8 +57,12 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-[40vh]">
-        <p className="text-muted-foreground">{error}</p>
+      <div className="max-w-4xl">
+        <EmptyState
+          icon={AlertCircle}
+          title="Dashboard indisponível"
+          description={error}
+        />
       </div>
     );
   }
@@ -98,25 +103,31 @@ export default function Dashboard() {
       )}
 
       {(data?.opportunities?.length ?? 0) === 0 && (
-        <Card className="p-6 border-border/60 text-center space-y-3">
-          <div className="flex justify-center">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Megaphone className="w-6 h-6 text-primary" />
-            </div>
-          </div>
-          <h3 className="font-semibold text-foreground">Nenhuma campanha ativa</h3>
-          <p className="text-sm text-muted-foreground">
-            Complete seu perfil e documentação para lançar sua primeira campanha.
-          </p>
-          <div className="flex justify-center gap-3 pt-2">
-            <Link to="/app/perfil-empresa" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-              <Building2 className="w-4 h-4" /> Perfil da empresa
-            </Link>
-            <Link to="/app/documentos" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline">
-              <FileCheck2 className="w-4 h-4" /> Documentos CVM 88
-            </Link>
-          </div>
-        </Card>
+        <EmptyState
+          icon={Megaphone}
+          title="Nenhuma campanha ativa"
+          description="Quando uma oportunidade estiver em análise ou captação, ela aparece aqui com status, progresso e indicadores principais."
+          action={
+            <>
+              <CampaignCreateButton />
+              <ButtonLink to="/app/perfil-empresa" icon={Building2}>
+                Revisar empresa
+              </ButtonLink>
+              <ButtonLink to="/app/documentos" icon={FileCheck2}>
+                Organizar documentos
+              </ButtonLink>
+            </>
+          }
+        />
+      )}
+
+      {Object.keys(monthlyMap).length === 0 && (
+        <EmptyState
+          icon={BarChart3}
+          title="Sem histórico de captação ainda"
+          description="Os gráficos mensais ficam disponíveis quando houver movimentação confirmada em campanhas."
+          className="bg-muted/20 shadow-none"
+        />
       )}
 
       {Object.keys(monthlyMap).length > 0 && (
@@ -145,6 +156,26 @@ export default function Dashboard() {
         </section>
       )}
     </div>
+  );
+}
+
+function ButtonLink({
+  to,
+  icon: Icon,
+  children,
+}: {
+  to: string;
+  icon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+    >
+      <Icon className="h-4 w-4" />
+      {children}
+    </Link>
   );
 }
 
@@ -178,7 +209,7 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
   );
 }
 
-function Stat({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
+function Stat({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
   return (
     <Card className="p-5 border-border/60 flex items-center gap-4">
       <div className="w-11 h-11 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
