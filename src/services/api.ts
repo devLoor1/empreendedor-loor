@@ -338,3 +338,129 @@ export async function getHome() {
 export async function getWarranties() {
   return apiFetch('/entrepreneurs/warranties');
 }
+
+// ── Tools / Tasks ────────────────────────────────────────────────────────────
+
+export type EntrepreneurTaskColumn = 'backlog' | 'todo' | 'review' | 'done';
+
+export type EntrepreneurTask = {
+  id: number;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  column: EntrepreneurTaskColumn;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EntrepreneurTaskInput = {
+  title: string;
+  description?: string | null;
+  due_date?: string | null;
+  column?: EntrepreneurTaskColumn;
+  position?: number;
+};
+
+export async function getEntrepreneurTasks() {
+  return apiFetch('/entrepreneurs/tasks') as Promise<{ data: EntrepreneurTask[] }>;
+}
+
+export async function createEntrepreneurTask(data: EntrepreneurTaskInput) {
+  return apiFetch('/entrepreneurs/tasks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }) as Promise<{ data: { id: number } }>;
+}
+
+export async function updateEntrepreneurTask(id: number, data: Partial<EntrepreneurTaskInput>) {
+  return apiFetch(`/entrepreneurs/tasks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteEntrepreneurTask(id: number) {
+  return apiFetch(`/entrepreneurs/tasks/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── Tools / Pitch Decks ──────────────────────────────────────────────────────
+
+export type EntrepreneurPitchDeck = {
+  id: number;
+  description: string | null;
+  problem: string | null;
+  solution: string | null;
+  market: string | null;
+  product: string | null;
+  business_model: string | null;
+  traction: string | null;
+  team: string | null;
+  financial: string | null;
+  fundraising: string | null;
+  generated_content: string | null;
+  download_link: string | null;
+  pdf_download_link: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EntrepreneurPitchDeckInput = {
+  description?: string | null;
+  problem?: string | null;
+  solution?: string | null;
+  market?: string | null;
+  product?: string | null;
+  business_model?: string | null;
+  traction?: string | null;
+  team?: string | null;
+  financial?: string | null;
+  fundraising?: string | null;
+  generated_content?: string | null;
+};
+
+export async function getEntrepreneurPitchDecks() {
+  return apiFetch('/entrepreneurs/pitch-decks') as Promise<{ data: EntrepreneurPitchDeck[] }>;
+}
+
+export async function createEntrepreneurPitchDeck(data: EntrepreneurPitchDeckInput) {
+  return apiFetch('/entrepreneurs/pitch-decks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }) as Promise<{ data: { id: number } }>;
+}
+
+export async function updateEntrepreneurPitchDeck(id: number, data: EntrepreneurPitchDeckInput) {
+  return apiFetch(`/entrepreneurs/pitch-decks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteEntrepreneurPitchDeck(id: number) {
+  return apiFetch(`/entrepreneurs/pitch-decks/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function generateEntrepreneurPitchDeck(id: number, prompt?: string) {
+  return apiFetch(`/entrepreneurs/pitch-decks/${id}/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ prompt: prompt || undefined }),
+  }) as Promise<{
+    data: {
+      text: string;
+      file_id: number;
+      provider: string;
+      model: string;
+    };
+  }>;
+}
+
+export async function generateEntrepreneurPitchDeckPdf(id: number) {
+  return apiFetch(`/entrepreneurs/pitch-decks/${id}/pdf`, {
+    method: 'POST',
+  }) as Promise<{ data: { file_id: number } }>;
+}

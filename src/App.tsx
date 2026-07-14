@@ -13,6 +13,9 @@ import CampaignsPage from "@/pages/campanhas";
 import CampaignCreatePage from "@/pages/campanha-nova";
 import CampaignDetail from "@/pages/campanha-detalhe";
 import CampaignDebtPage from "@/pages/campanha-divida";
+import ToolsPage from "@/pages/ferramentas";
+import ToolsKanbanPage from "@/pages/ferramentas-kanban";
+import ToolsPitchDeckPage from "@/pages/ferramentas-pitch-deck";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) return <Navigate to="/auth" replace />;
@@ -49,6 +52,9 @@ export default function App() {
           <Route path="campanhas/nova" element={<CampaignCreatePage />} />
           <Route path="campanhas/:id" element={<CampaignDetail />} />
           <Route path="campanhas/:id/divida" element={<CampaignDebtPage />} />
+          <Route path="ferramentas" element={<ToolsPage />} />
+          <Route path="ferramentas/kanban" element={<ToolsKanbanPage />} />
+          <Route path="ferramentas/pitch-deck" element={<ToolsPitchDeckPage />} />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
