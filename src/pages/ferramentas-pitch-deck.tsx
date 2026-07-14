@@ -9,9 +9,20 @@ import {
   Plus,
   Save,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -21,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createEntrepreneurPitchDeck,
+  deleteEntrepreneurPitchDeck,
   generateEntrepreneurPitchDeck,
   generateEntrepreneurPitchDeckPdf,
   getEntrepreneurPitchDecks,
@@ -168,6 +180,8 @@ export default function ToolsPitchDeckPage() {
   const [generating, setGenerating] = useState(false);
   const [savingText, setSavingText] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<EntrepreneurPitchDeck | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const activeDeck = useMemo(
     () => decks.find((deck) => deck.id === activeDeckId) ?? null,
@@ -190,8 +204,8 @@ export default function ToolsPitchDeckPage() {
 
       setActiveDeckId((current) => {
         if (selectId !== undefined) return selectId;
-        if (!current && nextDecks[0]) return nextDecks[0].id;
-        return current;
+        if (current && nextDecks.some((deck) => deck.id === current)) return current;
+        return nextDecks[0]?.id ?? null;
       });
     } catch {
       setError("Não foi possível carregar os pitch decks.");
@@ -297,6 +311,31 @@ export default function ToolsPitchDeckPage() {
     }
   };
 
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setDeleting(true);
+
+    try {
+      await deleteEntrepreneurPitchDeck(deleteTarget.id);
+
+      if (activeDeckId === deleteTarget.id) {
+        setActiveDeckId(null);
+        setForm(emptyPitchForm);
+        setGeneratedText("");
+        setPrompt("");
+      }
+
+      setDeleteTarget(null);
+      await loadDecks();
+      toast.success("Pitch deck excluído.");
+    } catch (err) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const handleGeneratePdf = async () => {
     if (!activeDeckId) {
       toast.error("Salve o rascunho antes de gerar PDF.");
@@ -387,30 +426,44 @@ export default function ToolsPitchDeckPage() {
           ) : (
             <div className="space-y-2">
               {decks.map((deck) => (
-                <button
+                <div
                   key={deck.id}
-                  type="button"
-                  onClick={() => setActiveDeckId(deck.id)}
                   className={cn(
-                    "w-full rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex items-start gap-2 rounded-lg border p-3 transition-colors",
                     activeDeckId === deck.id
-                      ? "border-primary bg-primary/10 text-foreground"
-                      : "border-border bg-card text-muted-foreground hover:bg-primary/5 hover:text-foreground",
+                      ? "border-primary bg-primary/10"
+                      : "border-border bg-card hover:bg-primary/5",
                   )}
                 >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <FileText className="h-4 w-4 shrink-0 text-primary" />
-                    <span className="truncate text-sm font-medium">
-                      Pitch deck #{deck.id}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs">Atualizado em {formatDate(deck.updated_at)}</div>
-                  {deck.generated_content && (
-                    <Badge className="mt-2 bg-primary/10 text-primary hover:bg-primary/10">
-                      Com texto gerado
-                    </Badge>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDeckId(deck.id)}
+                    className="min-w-0 flex-1 text-left text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <FileText className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="truncate text-sm font-medium text-foreground">
+                        Pitch deck #{deck.id}
+                      </span>
+                    </div>
+                    <div className="mt-1 text-xs">Atualizado em {formatDate(deck.updated_at)}</div>
+                    {deck.generated_content && (
+                      <Badge className="mt-2 bg-primary/10 text-primary hover:bg-primary/10">
+                        Com texto gerado
+                      </Badge>
+                    )}
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setDeleteTarget(deck)}
+                    aria-label={`Excluir pitch deck ${deck.id}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               ))}
             </div>
           )}
@@ -555,6 +608,32 @@ export default function ToolsPitchDeckPage() {
           </Card>
         </main>
       </div>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir pitch deck?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação remove este rascunho de pitch deck. Arquivos gerados pelo backend, quando
+              existirem, também serão removidos pelo contrato de exclusão.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
