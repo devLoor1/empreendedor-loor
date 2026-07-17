@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowLeft, CalendarDays, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +25,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  isToolDisabledApiError,
+  TOOL_DISABLED_MESSAGE,
+  useEntrepreneurTools,
+} from "@/hooks/use-entrepreneur-tools";
 import {
   createEntrepreneurTask,
   deleteEntrepreneurTask,
@@ -73,6 +78,8 @@ function isTaskColumn(value: string): value is EntrepreneurTaskColumn {
 }
 
 function getErrorMessage(error: unknown) {
+  if (isToolDisabledApiError(error)) return TOOL_DISABLED_MESSAGE;
+
   if (error && typeof error === "object") {
     const maybeMessage = (error as { message?: unknown }).message;
     if (typeof maybeMessage === "string" && maybeMessage.trim()) {
@@ -94,6 +101,7 @@ function formatDate(value: string | null) {
 }
 
 export default function ToolsKanbanPage() {
+  const { refresh: refreshToolAccess } = useEntrepreneurTools();
   const [tasks, setTasks] = useState<EntrepreneurTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,23 +112,31 @@ export default function ToolsKanbanPage() {
   const [movingTaskId, setMovingTaskId] = useState<number | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<number | null>(null);
 
-  const loadTasks = async () => {
+  const handleProtectedApiError = useCallback(
+    (error: unknown) => {
+      if (isToolDisabledApiError(error)) void refreshToolAccess();
+      return getErrorMessage(error);
+    },
+    [refreshToolAccess],
+  );
+
+  const loadTasks = useCallback(async () => {
     setLoading(true);
     setError(null);
 
     try {
       const response = await getEntrepreneurTasks();
       setTasks(response.data ?? []);
-    } catch {
-      setError("Não foi possível carregar as tarefas do Kanban.");
+    } catch (err) {
+      setError(handleProtectedApiError(err));
     } finally {
       setLoading(false);
     }
-  };
+  }, [handleProtectedApiError]);
 
   useEffect(() => {
     void loadTasks();
-  }, []);
+  }, [loadTasks]);
 
   const groupedTasks = useMemo(() => {
     const grouped = columns.reduce(
@@ -184,7 +200,7 @@ export default function ToolsKanbanPage() {
       setDialogOpen(false);
       await loadTasks();
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setSaving(false);
     }
@@ -200,7 +216,7 @@ export default function ToolsKanbanPage() {
       toast.success(`Tarefa movida para ${columnLabels[column]}.`);
       await loadTasks();
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setMovingTaskId(null);
     }
@@ -218,7 +234,7 @@ export default function ToolsKanbanPage() {
       toast.success("Tarefa excluída.");
       await loadTasks();
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setDeletingTaskId(null);
     }

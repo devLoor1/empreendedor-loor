@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { isAuthenticated } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
+import { ToolAccessGuard } from "@/components/tool-access-guard";
 import AuthPage from "@/pages/auth";
 import ChangePasswordPage from "@/pages/change-password";
 import VerificationEmailPage from "@/pages/verification-email";
@@ -53,8 +54,22 @@ export default function App() {
           <Route path="campanhas/:id" element={<CampaignDetail />} />
           <Route path="campanhas/:id/divida" element={<CampaignDebtPage />} />
           <Route path="ferramentas" element={<ToolsPage />} />
-          <Route path="ferramentas/kanban" element={<ToolsKanbanPage />} />
-          <Route path="ferramentas/pitch-deck" element={<ToolsPitchDeckPage />} />
+          <Route
+            path="ferramentas/kanban"
+            element={(
+              <ToolAccessGuard toolKey="kanban" label="Kanban">
+                <ToolsKanbanPage />
+              </ToolAccessGuard>
+            )}
+          />
+          <Route
+            path="ferramentas/pitch-deck"
+            element={(
+              <ToolAccessGuard toolKey="pitch_deck" label="Pitch Deck">
+                <ToolsPitchDeckPage />
+              </ToolAccessGuard>
+            )}
+          />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -31,6 +31,11 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  isToolDisabledApiError,
+  TOOL_DISABLED_MESSAGE,
+  useEntrepreneurTools,
+} from "@/hooks/use-entrepreneur-tools";
+import {
   createEntrepreneurPitchDeck,
   deleteEntrepreneurPitchDeck,
   generateEntrepreneurPitchDeck,
@@ -140,6 +145,8 @@ function normalizeForm(form: PitchForm): EntrepreneurPitchDeckInput {
 }
 
 function getErrorMessage(error: unknown) {
+  if (isToolDisabledApiError(error)) return TOOL_DISABLED_MESSAGE;
+
   if (error && typeof error === "object") {
     const maybeMessage = (error as { message?: unknown }).message;
     if (typeof maybeMessage === "string" && maybeMessage.trim()) {
@@ -169,6 +176,7 @@ function formatDate(value: string) {
 }
 
 export default function ToolsPitchDeckPage() {
+  const { refresh: refreshToolAccess } = useEntrepreneurTools();
   const [decks, setDecks] = useState<EntrepreneurPitchDeck[]>([]);
   const [activeDeckId, setActiveDeckId] = useState<number | null>(null);
   const [form, setForm] = useState<PitchForm>(emptyPitchForm);
@@ -193,26 +201,37 @@ export default function ToolsPitchDeckPage() {
     [form],
   );
 
-  const loadDecks = useCallback(async (selectId?: number | null) => {
-    setLoading(true);
-    setError(null);
+  const handleProtectedApiError = useCallback(
+    (error: unknown) => {
+      if (isToolDisabledApiError(error)) void refreshToolAccess();
+      return getErrorMessage(error);
+    },
+    [refreshToolAccess],
+  );
 
-    try {
-      const response = await getEntrepreneurPitchDecks();
-      const nextDecks = response.data ?? [];
-      setDecks(nextDecks);
+  const loadDecks = useCallback(
+    async (selectId?: number | null) => {
+      setLoading(true);
+      setError(null);
 
-      setActiveDeckId((current) => {
-        if (selectId !== undefined) return selectId;
-        if (current && nextDecks.some((deck) => deck.id === current)) return current;
-        return nextDecks[0]?.id ?? null;
-      });
-    } catch {
-      setError("Não foi possível carregar os pitch decks.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      try {
+        const response = await getEntrepreneurPitchDecks();
+        const nextDecks = response.data ?? [];
+        setDecks(nextDecks);
+
+        setActiveDeckId((current) => {
+          if (selectId !== undefined) return selectId;
+          if (current && nextDecks.some((deck) => deck.id === current)) return current;
+          return nextDecks[0]?.id ?? null;
+        });
+      } catch (err) {
+        setError(handleProtectedApiError(err));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [handleProtectedApiError],
+  );
 
   useEffect(() => {
     void loadDecks();
@@ -259,7 +278,7 @@ export default function ToolsPitchDeckPage() {
 
       return nextId;
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
       return null;
     } finally {
       setSaving(false);
@@ -284,7 +303,7 @@ export default function ToolsPitchDeckPage() {
       await loadDecks(deckId);
       toast.success("Texto gerado para revisão.");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setGenerating(false);
     }
@@ -305,7 +324,7 @@ export default function ToolsPitchDeckPage() {
       await loadDecks(activeDeckId);
       toast.success("Texto revisado salvo.");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setSavingText(false);
     }
@@ -330,7 +349,7 @@ export default function ToolsPitchDeckPage() {
       await loadDecks();
       toast.success("Pitch deck excluído.");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setDeleting(false);
     }
@@ -357,7 +376,7 @@ export default function ToolsPitchDeckPage() {
       await loadDecks(activeDeckId);
       toast.success("PDF gerado.");
     } catch (err) {
-      toast.error(getErrorMessage(err));
+      toast.error(handleProtectedApiError(err));
     } finally {
       setGeneratingPdf(false);
     }

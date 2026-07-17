@@ -339,6 +339,28 @@ export async function getWarranties() {
   return apiFetch('/entrepreneurs/warranties');
 }
 
+// ── Tools / Access ───────────────────────────────────────────────────────────
+
+export const ENTREPRENEUR_TOOL_KEYS = [
+  'kanban',
+  'pitch_deck',
+  'metrics',
+  'goals',
+  'agenda',
+] as const;
+
+export type EntrepreneurToolKey = (typeof ENTREPRENEUR_TOOL_KEYS)[number];
+
+export type EntrepreneurTool = {
+  key: string;
+  label: string;
+  enabled: boolean;
+};
+
+export async function getEntrepreneurTools() {
+  return apiFetch('/entrepreneurs/tools') as Promise<{ data: EntrepreneurTool[] }>;
+}
+
 // ── Tools / Tasks ────────────────────────────────────────────────────────────
 
 export type EntrepreneurTaskColumn = 'backlog' | 'todo' | 'review' | 'done';
