@@ -486,3 +486,76 @@ export async function generateEntrepreneurPitchDeckPdf(id: number) {
     method: 'POST',
   }) as Promise<{ data: { file_id: number } }>;
 }
+
+// ── Forum ─────────────────────────────────────────────────────────────────────
+
+export interface ForumComment {
+  id: string;
+  offer_id: string;
+  parent_id: string | null;
+  author_type: 'INVESTOR' | 'VENTURE' | 'ADMIN';
+  author_id: string;
+  author_alias?: string;
+  author_name?: string;
+  content: string;
+  edited_at: string | null;
+  deleted_at: string | null;
+  is_hidden: boolean;
+  is_edited: boolean;
+  is_deleted: boolean;
+  created_at: string;
+  updated_at: string;
+  replies: ForumComment[];
+}
+
+export interface ForumListItem {
+  id: number;
+  name: string;
+  totalComments: number;
+  unansweredComments: number;
+  hiddenComments: number;
+  deletedComments: number;
+}
+
+export interface InvestorSummary {
+  name: string;
+  email: string;
+  phone: string;
+  investmentsCount: number;
+}
+
+export async function getEntrepreneurForums() {
+  return apiFetch('/entrepreneurs/forums') as Promise<ForumListItem[]>;
+}
+
+export async function getEntrepreneurForumComments(offerId: string) {
+  return apiFetch(`/entrepreneurs/forums/${offerId}`) as Promise<ForumComment[]>;
+}
+
+export async function createEntrepreneurForumComment(offerId: string, content: string, parentId?: string) {
+  return apiFetch(`/entrepreneurs/forums/${offerId}`, {
+    method: 'POST',
+    body: JSON.stringify({ content, parent_id: parentId }),
+  }) as Promise<ForumComment>;
+}
+
+export async function updateEntrepreneurForumComment(commentId: string, content: string) {
+  return apiFetch(`/entrepreneurs/forums/${commentId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ content }),
+  }) as Promise<ForumComment>;
+}
+
+export async function deleteEntrepreneurForumComment(commentId: string) {
+  return apiFetch(`/entrepreneurs/forums/${commentId}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getEntrepreneurForumCommentReplies(commentId: string) {
+  return apiFetch(`/entrepreneurs/forums/${commentId}/replies`) as Promise<ForumComment[]>;
+}
+
+export async function getEntrepreneurInvestorSummary(investorId: string) {
+  return apiFetch(`/entrepreneurs/forums/investor/${investorId}/summary`) as Promise<InvestorSummary>;
+}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut, Wrench } from "lucide-react";
+import { LayoutDashboard, Building2, User, FileCheck2, Megaphone, LogOut, Wrench, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { logout } from "@/services/api";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ const nav = [
   { to: "/app/perfil-pessoal", label: "Perfil pessoal", icon: User },
   { to: "/app/documentos", label: "Documentos", icon: FileCheck2 },
   { to: "/app/campanhas", label: "Campanhas", icon: Megaphone },
+  { to: "/app/forum", label: "Fórum", icon: MessageSquare },
   { to: "/app/ferramentas", label: "Ferramentas", icon: Wrench },
 ] as const;
 
