@@ -17,6 +17,9 @@ import CampaignDebtPage from "@/pages/campanha-divida";
 import ToolsPage from "@/pages/ferramentas";
 import ToolsKanbanPage from "@/pages/ferramentas-kanban";
 import ToolsPitchDeckPage from "@/pages/ferramentas-pitch-deck";
+import { InstallGuidePage } from "@/features/pwa/InstallGuidePage";
+import { InstallPromotionBanner } from "@/features/pwa/InstallPromotionBanner";
+import { PwaInstallProvider } from "@/features/pwa/PwaInstallProvider";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) return <Navigate to="/auth" replace />;
@@ -29,9 +32,12 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <>
+    <PwaInstallProvider>
+      <InstallPromotionBanner />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
+        <Route path="/app-android" element={<InstallGuidePage platform="android" />} />
+        <Route path="/app-apple" element={<InstallGuidePage platform="apple" />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/entrepreneur/change-password/:token" element={<ChangePasswordPage />} />
         <Route path="/verification-email" element={<VerificationEmailPage />} />
@@ -74,7 +80,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster richColors position="top-right" />
-    </>
+    </PwaInstallProvider>
   );
 }
 
