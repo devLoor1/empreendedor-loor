@@ -1,69 +1,18 @@
-import { ArrowLeft, CheckCircle2, Download, ExternalLink, Share2, Smartphone } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, ExternalLink, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { InstallTutorialAnimation } from "./InstallTutorialAnimation";
 import { isAppleSafariContext } from "./installEnvironment";
 import { usePwaInstall } from "./usePwaInstall";
 import { runtimePwaConfig } from "./runtimePwaConfig";
-import type { PwaTutorialMedia } from "./pwaConfig";
 
 export type InstallGuidePlatform = "android" | "apple";
-
-function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(
-    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-
-  useEffect(() => {
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(query.matches);
-    query.addEventListener?.("change", update);
-    return () => query.removeEventListener?.("change", update);
-  }, []);
-
-  return reduced;
-}
-
-function TutorialMedia({ media, label }: { media: PwaTutorialMedia; label: string }) {
-  const reducedMotion = useReducedMotion();
-  const hasVideo = Boolean(media.webm || media.mp4);
-
-  if (!hasVideo) {
-    return (
-      <div className="flex min-h-64 flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-muted/35 p-8 text-center">
-        <Smartphone className="h-12 w-12 text-muted-foreground" aria-hidden="true" />
-        <p className="mt-4 font-semibold text-foreground">Tutorial oficial em preparação</p>
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          O espaço para WebM, MP4 e poster está pronto. Enquanto a gravação oficial não estiver
-          publicada, siga as instruções verificadas nesta página.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <video
-      aria-label={label}
-      className="max-h-[34rem] w-full rounded-3xl border border-border bg-black object-contain shadow-xl"
-      autoPlay={!reducedMotion}
-      controls
-      loop
-      muted
-      playsInline
-      poster={media.poster}
-    >
-      {media.webm ? <source src={media.webm} type="video/webm" /> : null}
-      {media.mp4 ? <source src={media.mp4} type="video/mp4" /> : null}
-      Seu navegador não consegue reproduzir este tutorial. Use as instruções em texto.
-    </video>
-  );
-}
 
 export function InstallGuidePage({ platform }: { platform: InstallGuidePlatform }) {
   const { canPrompt, installed, promptInstall } = usePwaInstall();
   const [feedback, setFeedback] = useState<string | null>(null);
   const isAndroid = platform === "android";
   const appleSafari = !isAndroid && isAppleSafariContext();
-  const media = runtimePwaConfig.tutorialMedia[platform];
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -103,15 +52,15 @@ export function InstallGuidePage({ platform }: { platform: InstallGuidePlatform 
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="mx-auto max-w-5xl px-5 py-8 sm:px-8 sm:py-12">
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
           <img
             src={runtimePwaConfig.logo}
             alt={`Logo ${runtimePwaConfig.brandName}`}
-            className="h-12 max-w-[180px] object-contain"
+            className="h-10 max-w-[145px] object-contain sm:h-12 sm:max-w-[180px]"
           />
           <Link
             to={runtimePwaConfig.startUrl}
-            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+            className="inline-flex max-w-full shrink-0 items-center gap-2 rounded-full border border-border px-3 py-2 text-xs font-medium hover:bg-muted sm:px-4 sm:text-sm"
           >
             <ArrowLeft className="h-4 w-4" aria-hidden="true" />
             Voltar ao aplicativo
@@ -171,9 +120,11 @@ export function InstallGuidePage({ platform }: { platform: InstallGuidePlatform 
             ) : null}
           </div>
 
-          <TutorialMedia
-            media={media}
-            label={`Tutorial de instalação de ${runtimePwaConfig.brandName} no ${isAndroid ? "Android" : "iPhone ou iPad"}`}
+          <InstallTutorialAnimation
+            platform={platform}
+            brandName={runtimePwaConfig.brandName}
+            icon={runtimePwaConfig.icons.icon192}
+            themeColor={runtimePwaConfig.themeColor}
           />
         </section>
 

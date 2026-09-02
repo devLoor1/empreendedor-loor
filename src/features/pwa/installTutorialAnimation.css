@@ -1,0 +1,700 @@
+.install-tutorial {
+  --tutorial-cycle: 10s;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #dde3ec;
+  border-radius: 1.75rem;
+  background: #fff;
+  color: #111827;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 12%);
+}
+
+.install-tutorial__visual {
+  display: flex;
+  min-height: 34rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  background: color-mix(in srgb, var(--tutorial-accent) 7%, white);
+}
+
+.install-tutorial__phone {
+  position: relative;
+  width: min(100%, 17.25rem);
+  aspect-ratio: 9 / 16.5;
+  overflow: hidden;
+  border: 0.45rem solid #18202c;
+  border-radius: 2.35rem;
+  background: #18202c;
+  box-shadow: 0 20px 38px rgb(15 23 42 / 22%);
+}
+
+.install-tutorial__speaker {
+  position: absolute;
+  z-index: 20;
+  top: 0.4rem;
+  left: 50%;
+  width: 3.4rem;
+  height: 0.34rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: #18202c;
+}
+
+.install-tutorial__screen {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1.85rem;
+  background: #f7f8fb;
+}
+
+.install-tutorial__scene {
+  position: absolute;
+  inset: 0;
+}
+
+.install-tutorial__browser {
+  display: flex;
+  flex-direction: column;
+  padding: 1.55rem 0.75rem 0.8rem;
+  animation: tutorial-browser var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial__browser-bar,
+.install-tutorial__panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid #d8dee8;
+  border-radius: 0.8rem;
+  background: #fff;
+  padding: 0.58rem 0.7rem;
+  color: #4b5563;
+  font-size: 0.7rem;
+  font-weight: 650;
+}
+
+.install-tutorial__browser-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.install-tutorial__browser-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.install-tutorial__browser-content img,
+.install-tutorial__confirmation img {
+  width: 4.15rem;
+  height: 4.15rem;
+  border: 1px solid #e2e6ed;
+  border-radius: 1.15rem;
+  object-fit: cover;
+  box-shadow: 0 10px 22px rgb(15 23 42 / 12%);
+}
+
+.install-tutorial__browser-content strong {
+  margin-top: 0.8rem;
+  color: #111827;
+  font-size: 1.15rem;
+}
+
+.install-tutorial__browser-content span {
+  margin-top: 0.2rem;
+  color: #667085;
+  font-size: 0.7rem;
+}
+
+.install-tutorial__browser button,
+.install-tutorial__confirmation button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: var(--tutorial-accent);
+  padding: 0.65rem;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.install-tutorial__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 4.9rem 0.75rem 0.85rem;
+  background: rgb(24 32 44 / 22%);
+  animation: tutorial-actions-android var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial[data-platform="apple"] .install-tutorial__actions {
+  animation-name: tutorial-actions-apple;
+}
+
+.install-tutorial__panel-heading {
+  border-radius: 0.9rem 0.9rem 0.35rem 0.35rem;
+}
+
+.install-tutorial__action {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid #dfe4ec;
+  border-radius: 0.85rem;
+  background: #fff;
+  padding: 0.68rem;
+  color: #1f2937;
+}
+
+.install-tutorial__action-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--tutorial-accent) 13%, white);
+  color: var(--tutorial-accent);
+}
+
+.install-tutorial__action > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.install-tutorial__action strong {
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.install-tutorial__action small {
+  margin-top: 0.15rem;
+  color: #667085;
+  font-size: 0.57rem;
+  line-height: 1.25;
+}
+
+.install-tutorial__action--install {
+  animation: tutorial-highlight-install var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial__action--share {
+  animation: tutorial-highlight-share var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial__action--home {
+  animation: tutorial-highlight-home var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial__confirmation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.2rem;
+  background: #fff;
+  text-align: center;
+  animation: tutorial-confirm-android var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial[data-platform="apple"] .install-tutorial__confirmation {
+  animation-name: tutorial-confirm-apple;
+}
+
+.install-tutorial__confirmation span {
+  margin-top: 1rem;
+  color: #667085;
+  font-size: 0.7rem;
+}
+
+.install-tutorial__confirmation strong {
+  margin: 0.2rem 0 1.15rem;
+  color: #111827;
+  font-size: 1.1rem;
+}
+
+.install-tutorial__confirmation button {
+  width: auto;
+  min-width: 8.5rem;
+  padding-inline: 1.1rem;
+}
+
+.install-tutorial__home-screen {
+  display: flex;
+  flex-direction: column;
+  padding: 2rem 1rem 1rem;
+  background: #f1f3f7;
+  animation: tutorial-home-android var(--tutorial-cycle) ease-in-out infinite;
+}
+
+.install-tutorial[data-platform="apple"] .install-tutorial__home-screen {
+  animation-name: tutorial-home-apple;
+}
+
+.install-tutorial__success {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  color: #344054;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.install-tutorial__success-icon {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--tutorial-accent);
+  color: #fff;
+}
+
+.install-tutorial__app-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 2.5rem);
+  justify-content: space-between;
+  gap: 1.8rem;
+  margin-top: 2.4rem;
+  opacity: 0.48;
+}
+
+.install-tutorial__placeholder-app {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.8rem;
+  background: #cfd5df;
+}
+
+.install-tutorial__installed-app {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: tutorial-installed-app var(--tutorial-cycle) cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.install-tutorial__installed-app > span {
+  display: grid;
+  width: 5rem;
+  height: 5rem;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 1.35rem;
+  background: #fff;
+  box-shadow: 0 16px 30px rgb(15 23 42 / 18%);
+}
+
+.install-tutorial__installed-app img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.install-tutorial__installed-app strong {
+  margin-top: 0.55rem;
+  color: #111827;
+  font-size: 0.8rem;
+}
+
+.install-tutorial__tap {
+  position: absolute;
+  z-index: 30;
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 0.22rem solid #fff;
+  border-radius: 999px;
+  background: var(--tutorial-accent);
+  box-shadow: 0 0 0 0 rgb(15 23 42 / 22%);
+  pointer-events: none;
+}
+
+.install-tutorial__tap--primary {
+  right: 2.5rem;
+  bottom: 5.2rem;
+  animation: tutorial-tap-primary-android var(--tutorial-cycle) ease-out infinite;
+}
+
+.install-tutorial[data-platform="apple"] .install-tutorial__tap--primary {
+  right: 2.35rem;
+  bottom: 15.3rem;
+  animation-name: tutorial-tap-primary-apple;
+}
+
+.install-tutorial__tap--secondary {
+  display: none;
+}
+
+.install-tutorial[data-platform="apple"] .install-tutorial__tap--secondary {
+  right: 2.35rem;
+  bottom: 11.35rem;
+  display: block;
+  animation: tutorial-tap-secondary-apple var(--tutorial-cycle) ease-out infinite;
+}
+
+.install-tutorial__timeline {
+  width: min(100%, 17.25rem);
+  height: 0.22rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(100 116 139 / 20%);
+}
+
+.install-tutorial__timeline span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  border-radius: inherit;
+  background: var(--tutorial-accent);
+  animation: tutorial-timeline var(--tutorial-cycle) linear infinite;
+}
+
+.install-tutorial__visual > p {
+  margin: 0;
+  color: #667085;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.install-tutorial__caption {
+  padding: 1rem 1.1rem 1.15rem;
+}
+
+.install-tutorial__caption > strong {
+  display: block;
+  margin-bottom: 0.7rem;
+  font-size: 0.78rem;
+}
+
+.install-tutorial__caption ol {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.48rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.install-tutorial__caption li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.42rem;
+  color: #667085;
+  font-size: 0.68rem;
+  line-height: 1.25;
+}
+
+.install-tutorial__caption li > span {
+  display: grid;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tutorial-accent) 12%, white);
+  color: var(--tutorial-accent);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+@keyframes tutorial-browser {
+  0%,
+  4%,
+  100% {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  7%,
+  22% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  29% {
+    opacity: 0;
+    transform: translateY(-0.35rem);
+  }
+  30%,
+  99% {
+    opacity: 0;
+  }
+}
+
+@keyframes tutorial-actions-android {
+  0%,
+  19%,
+  48%,
+  100% {
+    opacity: 0;
+    transform: translateY(1.2rem);
+  }
+  25%,
+  42% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tutorial-actions-apple {
+  0%,
+  17%,
+  60%,
+  100% {
+    opacity: 0;
+    transform: translateY(1.2rem);
+  }
+  23%,
+  54% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tutorial-confirm-android {
+  0%,
+  42%,
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  49%,
+  64% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tutorial-confirm-apple {
+  0%,
+  56%,
+  78%,
+  100% {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  63%,
+  73% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes tutorial-home-android {
+  0%,
+  64%,
+  99%,
+  100% {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  72%,
+  94% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tutorial-home-apple {
+  0%,
+  72%,
+  99%,
+  100% {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+  80%,
+  94% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tutorial-installed-app {
+  0%,
+  68% {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+  76%,
+  94% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+@keyframes tutorial-highlight-install {
+  0%,
+  24%,
+  43%,
+  100% {
+    border-color: #dfe4ec;
+    box-shadow: none;
+  }
+  29%,
+  38% {
+    border-color: var(--tutorial-accent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--tutorial-accent) 16%, transparent);
+  }
+}
+
+@keyframes tutorial-highlight-share {
+  0%,
+  20%,
+  35%,
+  100% {
+    border-color: #dfe4ec;
+    box-shadow: none;
+  }
+  24%,
+  31% {
+    border-color: var(--tutorial-accent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--tutorial-accent) 16%, transparent);
+  }
+}
+
+@keyframes tutorial-highlight-home {
+  0%,
+  34%,
+  57%,
+  100% {
+    border-color: #dfe4ec;
+    box-shadow: none;
+  }
+  40%,
+  52% {
+    border-color: var(--tutorial-accent);
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--tutorial-accent) 16%, transparent);
+  }
+}
+
+@keyframes tutorial-tap-primary-android {
+  0%,
+  25%,
+  40%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  29%,
+  35% {
+    opacity: 1;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 0.7rem rgb(15 23 42 / 0%);
+  }
+}
+
+@keyframes tutorial-tap-primary-apple {
+  0%,
+  20%,
+  34%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  24%,
+  30% {
+    opacity: 1;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 0.7rem rgb(15 23 42 / 0%);
+  }
+}
+
+@keyframes tutorial-tap-secondary-apple {
+  0%,
+  36%,
+  55%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+  41%,
+  50% {
+    opacity: 1;
+    transform: scale(0.82);
+    box-shadow: 0 0 0 0.7rem rgb(15 23 42 / 0%);
+  }
+}
+
+@keyframes tutorial-timeline {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@media (max-width: 360px) {
+  .install-tutorial__visual {
+    min-height: 31rem;
+    padding-inline: 0.75rem;
+  }
+
+  .install-tutorial__phone {
+    width: min(100%, 15rem);
+  }
+
+  .install-tutorial__caption ol {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .install-tutorial *,
+  .install-tutorial *::before,
+  .install-tutorial *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .install-tutorial__browser,
+  .install-tutorial__actions,
+  .install-tutorial__confirmation,
+  .install-tutorial__tap {
+    display: none;
+  }
+
+  .install-tutorial__home-screen,
+  .install-tutorial__installed-app {
+    opacity: 1;
+    transform: none;
+  }
+
+  .install-tutorial__timeline span {
+    transform: scaleX(1);
+  }
+
+  .install-tutorial__visual > p {
+    font-size: 0;
+  }
+
+  .install-tutorial__visual > p::after {
+    content: "Resumo estático do resultado final";
+    font-size: 0.68rem;
+  }
+}
