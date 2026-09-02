@@ -18,6 +18,9 @@ import ToolsPage from "@/pages/ferramentas";
 import ToolsKanbanPage from "@/pages/ferramentas-kanban";
 import ToolsPitchDeckPage from "@/pages/ferramentas-pitch-deck";
 import { ForumPage } from "@/pages/forum";
+import { InstallGuidePage } from "@/features/pwa/InstallGuidePage";
+import { InstallPromotionBanner } from "@/features/pwa/InstallPromotionBanner";
+import { PwaInstallProvider } from "@/features/pwa/PwaInstallProvider";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated()) return <Navigate to="/auth" replace />;
@@ -30,9 +33,12 @@ function RootRedirect() {
 
 export default function App() {
   return (
-    <>
+    <PwaInstallProvider>
+      <InstallPromotionBanner />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
+        <Route path="/app-android" element={<InstallGuidePage platform="android" />} />
+        <Route path="/app-apple" element={<InstallGuidePage platform="apple" />} />
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/entrepreneur/change-password/:token" element={<ChangePasswordPage />} />
         <Route path="/verification-email" element={<VerificationEmailPage />} />
@@ -58,25 +64,25 @@ export default function App() {
           <Route path="ferramentas" element={<ToolsPage />} />
           <Route
             path="ferramentas/kanban"
-            element={(
+            element={
               <ToolAccessGuard toolKey="kanban" label="Kanban">
                 <ToolsKanbanPage />
               </ToolAccessGuard>
-            )}
+            }
           />
           <Route
             path="ferramentas/pitch-deck"
-            element={(
+            element={
               <ToolAccessGuard toolKey="pitch_deck" label="Pitch Deck">
                 <ToolsPitchDeckPage />
               </ToolAccessGuard>
-            )}
+            }
           />
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster richColors position="top-right" />
-    </>
+    </PwaInstallProvider>
   );
 }
 
@@ -86,9 +92,7 @@ function NotFound() {
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Página não encontrada</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          A página que você procura não existe.
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">A página que você procura não existe.</p>
         <div className="mt-6">
           <a
             href="/"
