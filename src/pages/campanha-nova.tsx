@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
 import {
   Select,
   SelectContent,
@@ -48,6 +49,14 @@ import {
 } from "@/components/campaign-launch-guard";
 import { FileUploadCard, SelectedFileCard } from "@/components/upload/file-upload-card";
 import { cn } from "@/lib/utils";
+import {
+  getCountryValueForNewDraft,
+  getCountryValueForReset,
+  isBrazilCountry,
+  normalizeSubdivisionForPayload,
+  toNumericPayloadId,
+  type CountryReference,
+} from "@/features/campaign-creation/opportunity-creation";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -72,6 +81,7 @@ import {
 import {
   createOpportunity,
   getBanks,
+  getCountries,
   getSegments,
   getWarranties,
   uploadImage,
@@ -114,6 +124,8 @@ type ReferenceOption = {
   name: string;
 };
 
+type CountryOption = ReferenceOption & CountryReference;
+
 type CampaignDraft = {
   modality: CampaignModality | null;
   opportunityName: string;
@@ -134,6 +146,7 @@ type CampaignDraft = {
   shareValue: string;
   guarantees: string;
   teamMembers: string;
+  countryId: string;
   zipCode: string;
   state: string;
   city: string;
@@ -187,6 +200,7 @@ const INITIAL_DRAFT: CampaignDraft = {
   shareValue: "",
   guarantees: "",
   teamMembers: "",
+  countryId: "",
   zipCode: "",
   state: "",
   city: "",
@@ -450,12 +464,12 @@ const currencyFormatter = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-function getDataArray(response: unknown): ReferenceOption[] {
+function getDataArray<T extends ReferenceOption = ReferenceOption>(response: unknown): T[] {
   if (!response || typeof response !== "object") return [];
 
   const data = (response as { data?: unknown }).data;
 
-  return Array.isArray(data) ? (data as ReferenceOption[]) : [];
+  return Array.isArray(data) ? (data as T[]) : [];
 }
 
 function getResponseData(response: unknown): Record<string, unknown> | null {
@@ -591,6 +605,7 @@ function getDraftValidation(
   draft: CampaignDraft,
   segments: ReferenceOption[] = [],
   banks: ReferenceOption[] = [],
+  countries: CountryOption[] = [],
 ): WizardValidation {
   const target = toPositiveNumber(draft.targetAmount);
   const share = toPositiveNumber(draft.shareValue);
@@ -625,10 +640,14 @@ function getDraftValidation(
     quotaCount <= 9999 &&
     target % share === 0;
 
+  const selectedCountry = countries.find((country) => String(country.id) === draft.countryId) ?? null;
+  const brazilSelected = isBrazilCountry(selectedCountry);
   const operationsValid =
     fieldHasText(draft.teamMembers, 10) &&
-    isValidCepShape(draft.zipCode) &&
-    UF_OPTIONS.includes(draft.state) &&
+    Boolean(draft.countryId) &&
+    hasReferenceId(countries, draft.countryId) &&
+    (brazilSelected ? isValidCepShape(draft.zipCode) : fieldHasText(draft.zipCode)) &&
+    (brazilSelected ? UF_OPTIONS.includes(draft.state) : fieldHasText(draft.state, 2)) &&
     fieldHasText(draft.city, 2) &&
     fieldHasText(draft.street, 3) &&
     fieldHasText(draft.number);
@@ -1617,6 +1636,7 @@ function TargetStep({
 function OperationsStep({
   draft,
   warranties,
+  countries,
   onPatch,
   canContinue,
   onBack,
@@ -1624,6 +1644,7 @@ function OperationsStep({
 }: {
   draft: CampaignDraft;
   warranties: ReferenceOption[];
+  countries: CountryOption[];
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canContinue: boolean;
   onBack: () => void;
@@ -1632,12 +1653,20 @@ function OperationsStep({
   const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
   const lastRequestedCepRef = useRef("");
   const draftRef = useRef(draft);
+  const selectedCountry = countries.find((country) => String(country.id) === draft.countryId) ?? null;
+  const brazilSelected = isBrazilCountry(selectedCountry);
 
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
 
   useEffect(() => {
+    if (!brazilSelected) {
+      lastRequestedCepRef.current = "";
+      setCepStatus("idle");
+      return;
+    }
+
     const digits = onlyDigits(draft.zipCode);
 
     if (digits.length === 0) {
@@ -1691,7 +1720,20 @@ function OperationsStep({
       });
 
     return () => controller.abort();
-  }, [draft.zipCode, onPatch]);
+  }, [brazilSelected, draft.zipCode, onPatch]);
+
+  const handleCountryChange = (countryId: string) => {
+    const nextCountry = countries.find((country) => String(country.id) === countryId) ?? null;
+    const mustClearInvalidBrazilianState =
+      isBrazilCountry(nextCountry) && draft.state && !UF_OPTIONS.includes(draft.state);
+
+    onPatch({
+      countryId,
+      state: mustClearInvalidBrazilianState ? "" : draft.state,
+    });
+    lastRequestedCepRef.current = "";
+    setCepStatus("idle");
+  };
 
   return (
     <Card>
@@ -1747,44 +1789,82 @@ function OperationsStep({
           />
         </FormField>
 
+        <FormField
+          id="countryId"
+          label="País"
+          hint="Brasil é selecionado automaticamente em novas oportunidades; você pode alterá-lo."
+        >
+          <SearchableCombobox
+            id="countryId"
+            value={draft.countryId}
+            onValueChange={handleCountryChange}
+            options={countries.map((country) => ({
+              value: String(country.id),
+              label: country.name,
+              keywords: country.abbreviation ?? "",
+            }))}
+            placeholder="Selecione o país"
+            searchPlaceholder="Buscar país..."
+            emptyMessage="Nenhum país encontrado."
+            disabled={countries.length === 0}
+            aria-invalid={!draft.countryId}
+          />
+          {countries.length === 0 && (
+            <FieldHint valid={false} message="Aguarde o carregamento dos países." />
+          )}
+        </FormField>
+
         <div className="grid gap-4 md:grid-cols-4">
-          <FormField id="zipCode" label="CEP">
+          <FormField id="zipCode" label={brazilSelected ? "CEP" : "Código postal"}>
             <Input
               id="zipCode"
               value={draft.zipCode}
-              onChange={(event) => onPatch({ zipCode: formatCep(event.target.value) })}
-              placeholder="00000-000"
-              inputMode="numeric"
-              aria-invalid={cepStatus === "missing"}
+              onChange={(event) =>
+                onPatch({
+                  zipCode: brazilSelected ? formatCep(event.target.value) : event.target.value,
+                })
+              }
+              placeholder={brazilSelected ? "00000-000" : "Código postal"}
+              inputMode={brazilSelected ? "numeric" : "text"}
+              aria-invalid={brazilSelected && cepStatus === "missing"}
             />
-            {cepStatus === "missing" && (
+            {brazilSelected && cepStatus === "missing" && (
               <FieldHint
                 valid={false}
                 message={`${onlyDigits(draft.zipCode).length}/8 dígitos. Complete o CEP para buscar o endereço.`}
               />
             )}
-            {cepStatus === "loading" && <FieldHint valid message="Buscando endereço na BrasilAPI..." />}
-            {cepStatus === "found" && <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />}
-            {cepStatus === "error" && (
+            {brazilSelected && cepStatus === "loading" && <FieldHint valid message="Buscando endereço na BrasilAPI..." />}
+            {brazilSelected && cepStatus === "found" && <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />}
+            {brazilSelected && cepStatus === "error" && (
               <FieldHint
                 valid={false}
                 message="Não foi possível consultar o CEP agora. Você pode preencher o endereço manualmente."
               />
             )}
           </FormField>
-          <FormField id="state" label="UF">
-            <Select value={draft.state} onValueChange={(state) => onPatch({ state })}>
-              <SelectTrigger id="state">
-                <SelectValue placeholder="UF" />
-              </SelectTrigger>
-              <SelectContent>
-                {UF_OPTIONS.map((uf) => (
-                  <SelectItem key={uf} value={uf}>
-                    {uf}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <FormField id="state" label={brazilSelected ? "UF" : "Estado / província / região"}>
+            {brazilSelected ? (
+              <Select value={draft.state} onValueChange={(state) => onPatch({ state })}>
+                <SelectTrigger id="state">
+                  <SelectValue placeholder="UF" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UF_OPTIONS.map((uf) => (
+                    <SelectItem key={uf} value={uf}>
+                      {uf}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="state"
+                value={draft.state}
+                onChange={(event) => onPatch({ state: event.target.value })}
+                placeholder="Estado, província ou região"
+              />
+            )}
           </FormField>
           <FormField id="city" label="Cidade">
             <Input
@@ -1863,18 +1943,17 @@ function BankingStep({
       <CardContent className="space-y-6">
         <div className="grid gap-4 md:grid-cols-4">
           <FormField id="bankName" label="Banco">
-            <Select value={draft.bankName} onValueChange={(bankName) => onPatch({ bankName })}>
-              <SelectTrigger id="bankName">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {banks.map((bank) => (
-                  <SelectItem key={bank.id} value={String(bank.id)}>
-                    {bank.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableCombobox
+              id="bankName"
+              value={draft.bankName}
+              onValueChange={(bankName) => onPatch({ bankName })}
+              options={banks.map((bank) => ({ value: String(bank.id), label: bank.name }))}
+              placeholder="Selecione o banco"
+              searchPlaceholder="Buscar banco..."
+              emptyMessage="Nenhum banco encontrado."
+              disabled={banks.length === 0}
+              aria-invalid={!draft.bankName}
+            />
             {banks.length === 0 && (
               <FieldHint valid={false} message="Aguarde o carregamento dos bancos reais." />
             )}
@@ -2676,21 +2755,26 @@ export default function CampaignCreatePage() {
   const [draft, setDraft] = useState<CampaignDraft>(INITIAL_DRAFT);
   const [segments, setSegments] = useState<ReferenceOption[]>([]);
   const [banks, setBanks] = useState<ReferenceOption[]>([]);
+  const [countries, setCountries] = useState<CountryOption[]>([]);
   const [warranties, setWarranties] = useState<ReferenceOption[]>([]);
   const [referencesLoading, setReferencesLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<SubmitErrorState>(null);
-  const validation = useMemo(() => getDraftValidation(draft, segments, banks), [banks, draft, segments]);
+  const validation = useMemo(
+    () => getDraftValidation(draft, segments, banks, countries),
+    [banks, countries, draft, segments],
+  );
   const showWizard = canStart || previewWizard;
 
   useEffect(() => {
     let active = true;
 
     async function loadReferences() {
-      const [segmentsResult, banksResult, warrantiesResult] = await Promise.allSettled([
+      const [segmentsResult, banksResult, countriesResult, warrantiesResult] = await Promise.allSettled([
         getSegments(),
         getBanks(),
+        getCountries(),
         getWarranties(),
       ]);
 
@@ -2704,6 +2788,15 @@ export default function CampaignCreatePage() {
         setBanks(getDataArray(banksResult.value));
       }
 
+      if (countriesResult.status === "fulfilled") {
+        const nextCountries = getDataArray<CountryOption>(countriesResult.value);
+        setCountries(nextCountries);
+        setDraft((current) => ({
+          ...current,
+          countryId: getCountryValueForNewDraft(nextCountries, current.countryId),
+        }));
+      }
+
       if (warrantiesResult.status === "fulfilled") {
         setWarranties(getDataArray(warrantiesResult.value));
       }
@@ -2711,6 +2804,7 @@ export default function CampaignCreatePage() {
       if (
         segmentsResult.status === "rejected" ||
         banksResult.status === "rejected" ||
+        countriesResult.status === "rejected" ||
         warrantiesResult.status === "rejected"
       ) {
         toast.error("Não foi possível carregar todos os cadastros auxiliares.");
@@ -2734,7 +2828,7 @@ export default function CampaignCreatePage() {
   const resetPreview = () => {
     setPreviewWizard(false);
     setCurrentStep("modality");
-    setDraft(INITIAL_DRAFT);
+    setDraft({ ...INITIAL_DRAFT, countryId: getCountryValueForReset(countries) });
   };
 
   const goToStep = (step: WizardStep) => {
@@ -2814,19 +2908,22 @@ export default function CampaignCreatePage() {
       }
 
       const warrantyIds = draft.warrantyId ? [Number(draft.warrantyId)] : [];
+      const selectedCountry =
+        countries.find((country) => String(country.id) === draft.countryId) ?? null;
+      const brazilSelected = isBrazilCountry(selectedCountry);
       const payload = {
         is_private: draft.privacy === "private",
         modality: draft.modality,
         warranty: warrantyIds.length > 0,
         address: {
-          country_id: 1,
+          country_id: toNumericPayloadId(draft.countryId),
           city: draft.city.trim(),
           complement: null,
           district: draft.district.trim(),
           number: draft.number.trim(),
-          state: draft.state.trim().toUpperCase(),
+          state: normalizeSubdivisionForPayload(selectedCountry, draft.state),
           street_name: draft.street.trim(),
-          zip_code: onlyDigits(draft.zipCode),
+          zip_code: brazilSelected ? onlyDigits(draft.zipCode) : draft.zipCode.trim(),
         },
         members: [],
         monetary: {
@@ -2865,7 +2962,7 @@ export default function CampaignCreatePage() {
             }),
         warranties: warrantyIds,
         bank_account: {
-          bank_id: Number(draft.bankName),
+          bank_id: toNumericPayloadId(draft.bankName),
           agency: onlyDigits(draft.agency),
           account: onlyDigits(draft.account),
           account_digit: onlyDigits(draft.accountDigit),
@@ -3038,6 +3135,7 @@ export default function CampaignCreatePage() {
             <OperationsStep
               draft={draft}
               warranties={warranties}
+              countries={countries}
               onPatch={patchDraft}
               canContinue={validation.operations}
               onBack={goToPreviousStep}
