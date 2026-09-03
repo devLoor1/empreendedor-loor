@@ -230,6 +230,10 @@ export async function getBanks() {
   return apiFetch('/entrepreneurs/banks');
 }
 
+export async function getCountries() {
+  return apiFetch('/countries');
+}
+
 export async function getSegments() {
   return apiFetch('/segments');
 }
