@@ -11,7 +11,7 @@ import {
   toNumericPayloadId,
   type CountryReference,
   type SearchableOption,
-} from "./opportunity-creation";
+} from "./opportunity-creation.ts";
 
 const countries: CountryReference[] = [
   { id: 44, name: "Argentina", abbreviation: "AR" },
@@ -23,6 +23,8 @@ const banks: SearchableOption[] = [
   { value: "42", label: "Nubank", keywords: "Nu Pagamentos" },
 ];
 const pageSource = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
+const removedFieldName = ["what", "sapp", "_group"].join("");
+const removedBrandName = ["what", "sapp"].join("");
 let count = 0;
 const check = (condition: unknown, message: string) => {
   assert.ok(condition, message);
@@ -67,12 +69,12 @@ check(
   "combobox reutilizado apenas para país e banco",
 );
 check(
-  pageSource.includes("isValidWhatsAppGroupUrl(draft.whatsapp)"),
-  "validação de WhatsApp permanece inalterada",
+  !pageSource.toLocaleLowerCase("pt-BR").includes(removedBrandName),
+  "campo legado não aparece no estado, UI, validação ou mensagens",
 );
 check(
-  pageSource.includes("whatsapp_group: draft.whatsapp.trim(),"),
-  "payload de WhatsApp permanece inalterado",
+  !pageSource.includes(removedFieldName),
+  "payload omite o campo legado",
 );
 
 console.log(`opportunity-creation: ${count} assertions passed`);

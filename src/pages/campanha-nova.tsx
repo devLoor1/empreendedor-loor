@@ -137,7 +137,6 @@ type CampaignDraft = {
   shortDescription: string;
   longDescription: string;
   videoUrl: string;
-  whatsapp: string;
   profitability: string;
   installments: string;
   paymentFrequency: string;
@@ -191,7 +190,6 @@ const INITIAL_DRAFT: CampaignDraft = {
   shortDescription: "",
   longDescription: "",
   videoUrl: "",
-  whatsapp: "",
   profitability: "",
   installments: "",
   paymentFrequency: "",
@@ -381,7 +379,7 @@ const REQUIRED_STEPS: WizardStep[] = [
 
 const STEP_BLOCKING_MESSAGES: Record<WizardStep, string> = {
   modality: "Escolha uma modalidade antes de avançar.",
-  basics: "Revise os dados básicos: documentos, segmento, uso dos recursos, WhatsApp e descrições.",
+  basics: "Revise os dados básicos: documentos, segmento, uso dos recursos e descrições.",
   financial: "Complete os dados financeiros da modalidade escolhida.",
   target: "Informe meta e valor por cota válidos.",
   operations: "Complete equipe e endereço da operação.",
@@ -499,20 +497,6 @@ function isValidOptionalUrl(value: string) {
   }
 }
 
-function isValidWhatsAppGroupUrl(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed || trimmed === "https://chat.whatsapp.com/...") return false;
-
-  try {
-    const url = new URL(trimmed);
-
-    return url.protocol === "https:" && url.hostname === "chat.whatsapp.com" && url.pathname.length > 1;
-  } catch {
-    return false;
-  }
-}
-
 function toPositiveNumber(value: string) {
   return parseMoneyToNumber(value);
 }
@@ -617,7 +601,6 @@ function getDraftValidation(
     isValidDocument(draft.speCnpj, "cnpj") &&
     hasReferenceId(segments, draft.segment) &&
     fieldHasText(draft.resourceUtilization) &&
-    isValidWhatsAppGroupUrl(draft.whatsapp) &&
     isValidOptionalUrl(draft.videoUrl) &&
     fieldHasText(draft.shortDescription, SHORT_DESCRIPTION_MIN_LENGTH) &&
     fieldHasText(draft.longDescription, LONG_DESCRIPTION_MIN_LENGTH);
@@ -867,7 +850,7 @@ function getSubmitErrorStep(error: unknown): WizardStep | undefined {
     return "financial";
   }
   if (/goal|min_investment|monetary|quota|target/.test(shape)) return "target";
-  if (/segment|resource|company_cnpj|spe_cnpj|cpf|whatsapp|video|description|name/.test(shape)) {
+  if (/segment|resource|company_cnpj|spe_cnpj|cpf|video|description|name/.test(shape)) {
     return "basics";
   }
 
@@ -1369,49 +1352,24 @@ function BasicsStep({
           />
         </FormField>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField id="videoUrl" label="Vídeo opcional" hint="Campo visual, sem upload.">
-            <Input
-              id="videoUrl"
-              value={draft.videoUrl}
-              onChange={(event) => onPatch({ videoUrl: event.target.value })}
-              placeholder="https://..."
+        <FormField id="videoUrl" label="Vídeo opcional" hint="Campo visual, sem upload.">
+          <Input
+            id="videoUrl"
+            value={draft.videoUrl}
+            onChange={(event) => onPatch({ videoUrl: event.target.value })}
+            placeholder="https://..."
+          />
+          {draft.videoUrl.trim() && (
+            <FieldHint
+              valid={isValidOptionalUrl(draft.videoUrl)}
+              message={
+                isValidOptionalUrl(draft.videoUrl)
+                  ? "URL de vídeo válida."
+                  : "Informe uma URL completa ou deixe o campo vazio."
+              }
             />
-            {draft.videoUrl.trim() && (
-              <FieldHint
-                valid={isValidOptionalUrl(draft.videoUrl)}
-                message={
-                  isValidOptionalUrl(draft.videoUrl)
-                    ? "URL de vídeo válida."
-                    : "Informe uma URL completa ou deixe o campo vazio."
-                }
-              />
-            )}
-          </FormField>
-
-          <FormField
-            id="whatsapp"
-            label="Grupo de WhatsApp da oportunidade"
-            hint="O backend exige um link iniciado por https://chat.whatsapp.com/."
-          >
-            <Input
-              id="whatsapp"
-              value={draft.whatsapp}
-              onChange={(event) => onPatch({ whatsapp: event.target.value })}
-              placeholder="https://chat.whatsapp.com/..."
-            />
-            {draft.whatsapp.trim() && (
-              <FieldHint
-                valid={isValidWhatsAppGroupUrl(draft.whatsapp)}
-                message={
-                  isValidWhatsAppGroupUrl(draft.whatsapp)
-                    ? "Link de WhatsApp válido."
-                    : "Use um link completo de grupo em https://chat.whatsapp.com/."
-                }
-              />
-            )}
-          </FormField>
-        </div>
+          )}
+        </FormField>
 
         <StepActions
           canContinue={canContinue}
@@ -2938,7 +2896,6 @@ export default function CampaignCreatePage() {
           business_name: draft.cardTitle.trim() || draft.opportunityName.trim(),
           company_cnpj: onlyDigits(draft.documentNumber),
           cpf: onlyDigits(draft.responsibleCpf),
-          whatsapp_group: draft.whatsapp.trim(),
           promotional_video_url: draft.videoUrl.trim() || draft.extraVideoUrl.trim() || null,
           description: draft.shortDescription.trim(),
           name: draft.opportunityName.trim(),
