@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useState, type DragEvent } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  Download,
-  FileText,
-  Loader2,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, CheckCircle2, Download, FileText, Loader2, Upload } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,7 +59,7 @@ type DocumentRecord = {
   created_at?: string;
 };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "docx", "xlsx"];
 
 const DOCUMENTS: DocumentConfig[] = [
@@ -201,7 +194,7 @@ export default function DocsPage() {
       allowedExtensions: ALLOWED_EXTENSIONS,
       maxSizeBytes: MAX_FILE_SIZE,
       invalidTypeMessage: "Use PDF, PNG, JPG, JPEG, DOCX ou XLSX.",
-      maxSizeMessage: "O arquivo deve ter até 10 MB.",
+      maxSizeMessage: "O arquivo deve ter até 20 MB.",
     });
 
     if (!result.file) {
@@ -321,7 +314,9 @@ export default function DocsPage() {
           </div>
           <div className="w-full md:w-64">
             <div className="flex justify-between text-sm mb-1 text-muted-foreground">
-              <span>{uploadedCount}/{DOCUMENTS.length}</span>
+              <span>
+                {uploadedCount}/{DOCUMENTS.length}
+              </span>
               <span>{progress}%</span>
             </div>
             <Progress value={progress} className="h-2.5" />
@@ -375,15 +370,12 @@ export default function DocsPage() {
               Envie ou substitua este documento. O arquivo será persistido no backend.
             </DialogDescription>
           </DialogHeader>
-          <div
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={handleDrop}
-          >
+          <div onDragOver={(event) => event.preventDefault()} onDrop={handleDrop}>
             <FileUploadCard
               id="documentUploadFile"
               accept={getUploadAccept(ALLOWED_EXTENSIONS)}
               title="Selecionar documento"
-              description="PDF, PNG, JPG, JPEG, DOCX ou XLSX até 10 MB. Também é possível arrastar o arquivo aqui."
+              description="PDF, PNG, JPG, JPEG, DOCX ou XLSX até 20 MB. Também é possível arrastar o arquivo aqui."
               file={selectedFile}
               error={uploadError}
               status={uploadNotice || "Arquivo pronto para envio"}
