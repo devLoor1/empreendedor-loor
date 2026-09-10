@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:documents": "node --experimental-strip-types src/features/documents/document-upload.assertions.ts",
+    "test:password-policy": "node --experimental-strip-types src/features/auth/password-policy.assertions.ts",
     "lint": "eslint .",
     "format": "prettier --write ."
   },

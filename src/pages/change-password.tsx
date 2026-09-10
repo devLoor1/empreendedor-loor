@@ -7,6 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import { changePassword } from "@/services/api";
+import {
+  getPasswordPolicyError,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_REQUIREMENTS_COPY,
+} from "@/features/auth/password-policy";
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
@@ -16,19 +22,22 @@ export default function ChangePasswordPage() {
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.password || !form.password_confirmation) return toast.error("Preencha os dois campos");
+    if (!form.password || !form.password_confirmation)
+      return toast.error("Preencha os dois campos");
     if (form.password !== form.password_confirmation) return toast.error("As senhas não coincidem");
-    if (form.password.length < 6) return toast.error("A senha deve ter ao menos 6 caracteres");
+    const passwordPolicyError = getPasswordPolicyError(form.password);
+    if (passwordPolicyError) return toast.error(passwordPolicyError);
     if (!token) return toast.error("Token inválido");
     setLoading(true);
     try {
       await changePassword(token, form.password, form.password_confirmation);
       toast.success("Senha alterada com sucesso! Faça login.");
       navigate("/auth");
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const apiError = err as { errors?: Array<{ message?: string }>; message?: string };
       const msg =
-        err?.errors?.[0]?.message ||
-        err?.message ||
+        apiError?.errors?.[0]?.message ||
+        apiError?.message ||
         "Link inválido ou expirado. Solicite um novo.";
       toast.error(msg);
     } finally {
@@ -50,10 +59,17 @@ export default function ChangePasswordPage() {
             <Input
               id="new-pwd"
               type="password"
-              placeholder="Mín. 6 caracteres"
+              placeholder="8 a 60 caracteres"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
+              autoComplete="new-password"
+              aria-describedby="new-pwd-help"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
+            <p id="new-pwd-help" className="text-xs text-muted-foreground">
+              {PASSWORD_REQUIREMENTS_COPY}
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-pwd">Confirmar senha</Label>
@@ -61,6 +77,9 @@ export default function ChangePasswordPage() {
               id="confirm-pwd"
               type="password"
               placeholder="Repita a senha"
+              minLength={PASSWORD_MIN_LENGTH}
+              maxLength={PASSWORD_MAX_LENGTH}
+              autoComplete="new-password"
               value={form.password_confirmation}
               onChange={(e) => setForm({ ...form, password_confirmation: e.target.value })}
             />
@@ -68,7 +87,12 @@ export default function ChangePasswordPage() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Salvando..." : "Salvar nova senha"}
           </Button>
-          <Button type="button" variant="ghost" className="w-full" onClick={() => navigate("/auth")}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => navigate("/auth")}
+          >
             Voltar ao login
           </Button>
         </form>
