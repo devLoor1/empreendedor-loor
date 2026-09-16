@@ -63,6 +63,11 @@ import {
   OPPORTUNITY_IMAGE_EXTENSIONS,
   validateOpportunityImage,
 } from "@/features/campaign-creation/opportunity-form-contract";
+import {
+  extractOpportunityProfilePrefill,
+  mergeOpportunityProfilePrefill,
+  type OpportunityProfilePrefill,
+} from "@/features/campaign-creation/opportunity-profile-prefill";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -87,7 +92,10 @@ import {
 import {
   createOpportunity,
   getBanks,
+  getAddress,
+  getBankingInformation,
   getCountries,
+  getPersonalInformation,
   getSegments,
   getWarranties,
   uploadImage,
@@ -157,6 +165,7 @@ type CampaignDraft = {
   district: string;
   street: string;
   number: string;
+  complement: string;
   warrantyId: string;
   bankName: string;
   agency: string;
@@ -203,6 +212,7 @@ const INITIAL_DRAFT: CampaignDraft = {
   district: "",
   street: "",
   number: "",
+  complement: "",
   warrantyId: "",
   bankName: "",
   agency: "",
@@ -1814,6 +1824,15 @@ function OperationsStep({
           </FormField>
         </div>
 
+        <FormField id="complement" label="Complemento" hint="Opcional. A cópia nesta oportunidade não altera o endereço do perfil.">
+          <Input
+            id="complement"
+            value={draft.complement}
+            onChange={(event) => onPatch({ complement: event.target.value })}
+            placeholder="Sala, bloco ou referência"
+          />
+        </FormField>
+
         <StepActions
           canContinue={canContinue}
           onBack={onBack}
@@ -1848,7 +1867,7 @@ function BankingStep({
         </Badge>
         <CardTitle>Conta bancária, Pix e privacidade</CardTitle>
         <CardDescription>
-          Campos visuais para compor o fluxo. Nenhum Pix, pagamento ou QR Code será criado.
+          Estes dados serão copiados para a oportunidade sem alterar os dados bancários do perfil. Nenhum pagamento ou QR Code é criado aqui.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1931,7 +1950,7 @@ function BankingStep({
               </SelectContent>
             </Select>
           </FormField>
-          <FormField id="pixKey" label="Chave Pix visual" hint="Não use Pix real neste ciclo.">
+          <FormField id="pixKey" label="Chave Pix da oportunidade" hint="Confirme a chave antes de enviar; a cópia não altera a chave do perfil.">
             <Input
               id="pixKey"
               value={draft.pixKey}
@@ -2563,6 +2582,14 @@ export default function CampaignCreatePage() {
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [warranties, setWarranties] = useState<ReferenceOption[]>([]);
   const [referencesLoading, setReferencesLoading] = useState(true);
+  const [profilePrefill, setProfilePrefill] = useState({
+    loading: true,
+    failures: [] as string[],
+    bankNeedsSelection: false,
+    hasValues: false,
+  });
+  const touchedDraftFieldsRef = useRef(new Set<keyof CampaignDraft>());
+  const profilePrefillRef = useRef<OpportunityProfilePrefill>({});
   const [submitting, setSubmitting] = useState(false);
   const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<SubmitErrorState>(null);
@@ -2625,7 +2652,50 @@ export default function CampaignCreatePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (referencesLoading) return;
+    let active = true;
+
+    async function loadProfileCopies() {
+      const [personalResult, addressResult, bankingResult] = await Promise.allSettled([
+        getPersonalInformation(),
+        getAddress(),
+        getBankingInformation(),
+      ]);
+      if (!active) return;
+
+      const failures = [
+        personalResult.status === "rejected" && "CPF do perfil",
+        addressResult.status === "rejected" && "endereço do perfil",
+        bankingResult.status === "rejected" && "dados bancários do perfil",
+      ].filter((item): item is string => Boolean(item));
+
+      const { values, bankNeedsSelection } = extractOpportunityProfilePrefill(
+        personalResult.status === "fulfilled" ? personalResult.value : null,
+        addressResult.status === "fulfilled" ? addressResult.value : null,
+        bankingResult.status === "fulfilled" ? bankingResult.value : null,
+        banks.map((bank) => bank.id),
+      );
+      profilePrefillRef.current = values;
+      setDraft((current) =>
+        mergeOpportunityProfilePrefill(current, values, touchedDraftFieldsRef.current),
+      );
+      setProfilePrefill({
+        loading: false,
+        failures,
+        bankNeedsSelection,
+        hasValues: Object.keys(values).length > 0,
+      });
+    }
+
+    void loadProfileCopies();
+    return () => { active = false; };
+  }, [banks, referencesLoading]);
+
   const patchDraft = useCallback((patch: Partial<CampaignDraft>) => {
+    (Object.keys(patch) as Array<keyof CampaignDraft>).forEach((field) => {
+      touchedDraftFieldsRef.current.add(field);
+    });
     setDraft((current) => ({ ...current, ...patch }));
     setSubmitError(null);
   }, []);
@@ -2633,7 +2703,12 @@ export default function CampaignCreatePage() {
   const resetPreview = () => {
     setPreviewWizard(false);
     setCurrentStep("modality");
-    setDraft({ ...INITIAL_DRAFT, countryId: getCountryValueForReset(countries) });
+    touchedDraftFieldsRef.current.clear();
+    setDraft(mergeOpportunityProfilePrefill(
+      { ...INITIAL_DRAFT, countryId: getCountryValueForReset(countries) },
+      profilePrefillRef.current,
+      touchedDraftFieldsRef.current,
+    ));
   };
 
   const goToStep = (step: WizardStep) => {
@@ -2723,7 +2798,7 @@ export default function CampaignCreatePage() {
         address: {
           country_id: toNumericPayloadId(draft.countryId),
           city: draft.city.trim(),
-          complement: null,
+          complement: draft.complement.trim() || null,
           district: draft.district.trim(),
           number: draft.number.trim(),
           state: normalizeSubdivisionForPayload(selectedCountry, draft.state),
@@ -2869,6 +2944,28 @@ export default function CampaignCreatePage() {
             <AlertDescription>
               Não há autosave nem rascunho. Fechar a página descarta os dados locais. A criação
               persistente acontece apenas no botão final de revisão.
+            </AlertDescription>
+          </Alert>
+
+          <Alert variant={profilePrefill.failures.length ? "destructive" : "default"}>
+            {profilePrefill.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            <AlertTitle>
+              {profilePrefill.loading
+                ? "Consultando perfil"
+                : profilePrefill.hasValues
+                  ? "Dados do perfil disponíveis no rascunho"
+                  : "Preenchimento manual disponível"}
+            </AlertTitle>
+            <AlertDescription>
+              {profilePrefill.loading
+                ? "CPF, endereço e dados bancários existentes serão copiados apenas para campos ainda não editados."
+                : "Revise e edite os valores nesta oportunidade. O perfil e seus dados bancários não serão alterados."}
+              {profilePrefill.failures.length > 0 && (
+                <p>Não foi possível consultar {profilePrefill.failures.join(", ")}; preencha esses campos manualmente.</p>
+              )}
+              {profilePrefill.bankNeedsSelection && (
+                <p>O banco salvo no perfil não consta do catálogo ativo. Selecione um banco disponível antes de continuar.</p>
+              )}
             </AlertDescription>
           </Alert>
 
