@@ -11,6 +11,7 @@
     "test:financial-data": "node --experimental-strip-types src/features/campaign-creation/financial-data.assertions.ts",
     "test:opportunity-form": "node --experimental-strip-types src/features/campaign-creation/opportunity-form-contract.assertions.ts",
     "test:opportunity-prefill": "node --experimental-strip-types src/features/campaign-creation/opportunity-profile-prefill.assertions.ts",
+    "test:opportunity-documents": "node --experimental-strip-types src/features/campaign-documents/opportunity-documents.assertions.ts",
     "test:password-policy": "node --experimental-strip-types src/features/auth/password-policy.assertions.ts",
     "lint": "eslint .",
     "format": "prettier --write ."

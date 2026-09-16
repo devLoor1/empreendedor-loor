@@ -313,6 +313,24 @@ export async function getOpportunityDocuments(id: number) {
   return apiFetch(`/entrepreneurs/opportunities/${id}/documents`);
 }
 
+export async function downloadOpportunityInvestmentContract(opportunityId: number, documentId: number) {
+  const token = getToken();
+  const slug = import.meta.env.VITE_API_SLUG;
+  const headers: Record<string, string> = { Accept: 'application/pdf' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (slug) headers['x-whitelabel-slug'] = slug;
+
+  const response = await fetch(
+    `${API_BASE}/entrepreneurs/opportunities/${opportunityId}/documents/${documentId}/investment-contract/download`,
+    { headers },
+  );
+  if (!response.ok) {
+    await handleApiResponse(response);
+    throw new Error(DEFAULT_API_ERROR_MESSAGE);
+  }
+  return response.blob();
+}
+
 export async function getEntrepreneurDocuments() {
   return apiFetch('/entrepreneurs/documents');
 }

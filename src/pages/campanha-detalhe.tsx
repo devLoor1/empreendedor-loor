@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import {
   ArrowLeft, Users, Calendar, TrendingUp, Building2, Shield, ExternalLink,
   Play, PieChart, Banknote, Clock, CheckCircle2, AlertCircle, CircleDollarSign,
-  Percent, Timer, CreditCard, FileText, Share2, MessageCircle,
+  Percent, Timer, CreditCard, FileText, Share2, MessageCircle, Download,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,8 +11,19 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getOpportunity, getOpportunityInvestors } from "@/services/api";
+import {
+  downloadOpportunityInvestmentContract,
+  getOpportunity,
+  getOpportunityDocuments,
+  getOpportunityInvestors,
+} from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import {
+  opportunityDocumentTypeLabel,
+  parseOpportunityDocuments,
+  safeOpportunityDocumentUrl,
+  type OpportunityDocument,
+} from "@/features/campaign-documents/opportunity-documents";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -223,6 +234,7 @@ export default function CampaignDetail() {
         <TabsList className="w-full justify-start">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="investors">Investidores ({totalInvestors})</TabsTrigger>
+          <TabsTrigger value="documents">Documentos</TabsTrigger>
           {opp.debt && <TabsTrigger value="debt">Dívida</TabsTrigger>}
           {opp.equity && <TabsTrigger value="equity">Equity</TabsTrigger>}
         </TabsList>
@@ -233,6 +245,10 @@ export default function CampaignDetail() {
 
         <TabsContent value="investors" className="mt-4">
           <InvestorsTab investors={investors} anonymous={anonymous} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <OpportunityDocumentsTab opportunityId={opp.id} />
         </TabsContent>
 
         {opp.debt && (
@@ -248,6 +264,95 @@ export default function CampaignDetail() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
+  const [documents, setDocuments] = useState<OpportunityDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(false);
+    getOpportunityDocuments(opportunityId)
+      .then((response) => {
+        if (active) setDocuments(parseOpportunityDocuments(response));
+      })
+      .catch(() => { if (active) setError(true); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [opportunityId, retry]);
+
+  const downloadContract = async (document: OpportunityDocument) => {
+    setDownloadingId(document.id);
+    setDownloadError(false);
+    try {
+      const blob = await downloadOpportunityInvestmentContract(opportunityId, document.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      const safeName = document.name.replace(/[\\/:*?"<>|]/g, "-").replace(/\.pdf$/i, "") || "contrato";
+      anchor.download = `${safeName}.pdf`;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      setDownloadError(true);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  return (
+    <Card className="p-5 border-border/60 space-y-4">
+      <div>
+        <h3 className="font-semibold text-foreground">Documentos da oportunidade</h3>
+        <p className="text-sm text-muted-foreground">
+          Arquivos associados a esta oportunidade. O envio e a substituição pelo Empreendedor ainda não estão disponíveis.
+        </p>
+      </div>
+      {loading && <p className="text-sm text-muted-foreground">Carregando documentos...</p>}
+      {error && (
+        <div className="flex items-center gap-3 text-sm text-destructive">
+          Não foi possível carregar os documentos.
+          <Button size="sm" variant="outline" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</Button>
+        </div>
+      )}
+      {downloadError && <p className="text-sm text-destructive">Não foi possível baixar o contrato. Tente novamente.</p>}
+      {!loading && !error && documents.length === 0 && (
+        <p className="text-sm text-muted-foreground">Nenhum documento da oportunidade disponível.</p>
+      )}
+      {!loading && !error && documents.length > 0 && (
+        <ul className="space-y-3">
+          {documents.map((document) => {
+            const link = safeOpportunityDocumentUrl(document.download_link);
+            return (
+              <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
+                <div>
+                  <p className="font-medium text-sm">{document.name}</p>
+                  <p className="text-xs text-muted-foreground">{opportunityDocumentTypeLabel(document.type)}</p>
+                </div>
+                {document.type === "investment_contract" ? (
+                  <Button size="sm" variant="outline" disabled={downloadingId === document.id} onClick={() => void downloadContract(document)}>
+                    <Download className="mr-2 h-4 w-4" /> {downloadingId === document.id ? "Baixando..." : "Baixar contrato"}
+                  </Button>
+                ) : link ? (
+                  <Button asChild size="sm" variant="outline">
+                    <a href={link} target="_blank" rel="noopener noreferrer"><Download className="mr-2 h-4 w-4" /> Abrir arquivo</a>
+                  </Button>
+                ) : <span className="text-xs text-muted-foreground">Arquivo indisponível</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
   );
 }
 
