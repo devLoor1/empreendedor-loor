@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignCreateButton } from "@/components/campaign-launch-guard";
 import { EmptyState } from "@/components/empty-state";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
 import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone, type LucideIcon } from "lucide-react";
 import {
   getActiveOpportunities,
@@ -114,7 +115,7 @@ export default function CampaignsPage() {
                     </div>
                     <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                       <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" /> {c.total_investors} investidores</div>
-                      <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {new Date(c.due_at).toLocaleDateString("pt-BR")}</div>
+                      <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Prazo previsto: {formatOpportunityDate(c.due_at)}</div>
                     </div>
                   </Card>
                 </Link>
@@ -142,7 +143,7 @@ export default function CampaignsPage() {
                   </div>
                   {c.created_at && (
                     <p className="text-xs text-muted-foreground mt-3">
-                      Submetida em {new Date(c.created_at).toLocaleDateString("pt-BR")}
+                      Criada em {formatOpportunityDate(c.created_at)}
                     </p>
                   )}
                 </Card>
@@ -168,6 +169,7 @@ export default function CampaignsPage() {
                       {c.modality === "equity" ? "Equity" : "Dívida"}
                     </Badge>
                   </div>
+                  {parseOpportunityDate(c.end_at) && <p className="text-xs text-muted-foreground mt-3">Encerrada em {formatOpportunityDate(c.end_at)}</p>}
                 </Card>
               </Link>
             ))}
