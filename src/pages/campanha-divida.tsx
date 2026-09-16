@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDebt, payNextInstallment, debtSimulatePayment } from "@/services/api";
+import { formatBRLFromCents } from "@/utils/br-formatters";
 
 const FREQ_MAP: Record<string, string> = {
   monthly: "Mensal",
@@ -71,10 +72,6 @@ type DebtDetail = {
   fees: { id: number; feeType: string; percentageValue: number | null; fixedValue: number | null }[];
   installments: Installment[];
 };
-
-function formatBRL(value: number | string) {
-  return Number(value).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 function InstallmentBadge({ status }: { status: string }) {
   if (status === "paid") return <Badge className="bg-success text-success-foreground hover:bg-success text-xs">Paga</Badge>;
@@ -216,7 +213,7 @@ export default function CampaignDebtPage() {
             <span className="text-xs uppercase">Pagas</span>
           </div>
           <p className="text-xl font-bold text-foreground">{paid.length}/{installments.length}</p>
-          <p className="text-xs text-muted-foreground">{formatBRL(totalPaid)}</p>
+          <p className="text-xs text-muted-foreground">{formatBRLFromCents(totalPaid)}</p>
         </Card>
         <Card className="p-4 border-border/60">
           <div className="flex items-center gap-2 text-warning-foreground mb-1">
@@ -224,7 +221,7 @@ export default function CampaignDebtPage() {
             <span className="text-xs uppercase">Restante</span>
           </div>
           <p className="text-xl font-bold text-foreground">{overdue.length + pending.length}</p>
-          <p className="text-xs text-muted-foreground">{formatBRL(totalRemaining)}</p>
+          <p className="text-xs text-muted-foreground">{formatBRLFromCents(totalRemaining)}</p>
         </Card>
       </div>
 
@@ -354,7 +351,7 @@ export default function CampaignDebtPage() {
                 <div key={f.id} className="flex justify-between text-sm">
                   <span className="text-muted-foreground capitalize">{f.feeType.replace(/_/g, " ")}</span>
                   <span className="font-medium text-foreground">
-                    {f.percentageValue != null ? `${f.percentageValue}%` : formatBRL(f.fixedValue ?? 0)}
+                    {f.percentageValue != null ? `${f.percentageValue}%` : formatBRLFromCents(f.fixedValue ?? 0)}
                   </span>
                 </div>
               ))}
@@ -369,7 +366,7 @@ export default function CampaignDebtPage() {
                 <div key={p.id} className="flex justify-between text-sm">
                   <span className="text-muted-foreground">{p.name}</span>
                   <span className="font-medium text-foreground">
-                    {p.percentageValue != null ? `${p.percentageValue}%` : formatBRL(p.fixedValue ?? 0)}
+                    {p.percentageValue != null ? `${p.percentageValue}%` : formatBRLFromCents(p.fixedValue ?? 0)}
                   </span>
                 </div>
               ))}
@@ -412,7 +409,7 @@ export default function CampaignDebtPage() {
                         {idx + 1}ª parcela
                       </span>
                     </td>
-                    <td className="p-3 text-right font-medium text-foreground">{formatBRL(inst.value)}</td>
+                    <td className="p-3 text-right font-medium text-foreground">{formatBRLFromCents(inst.value)}</td>
                     <td className="p-3 text-right text-muted-foreground">
                       {isoDate ? new Date(isoDate).toLocaleDateString("pt-BR") : "—"}
                     </td>

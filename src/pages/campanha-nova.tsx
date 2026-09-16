@@ -50,6 +50,7 @@ import {
 import { FileUploadCard, SelectedFileCard } from "@/components/upload/file-upload-card";
 import { cn } from "@/lib/utils";
 import {
+  buildOpportunityMonetaryPayload,
   getCountryValueForNewDraft,
   getCountryValueForReset,
   isBrazilCountry,
@@ -70,6 +71,7 @@ import {
   isValidCepShape,
   normalizePixKeyByType,
   onlyDigits,
+  parseLocaleDecimalNumber,
   parseMoneyToNumber,
 } from "@/utils/br-formatters";
 import {
@@ -501,6 +503,10 @@ function toPositiveNumber(value: string) {
   return parseMoneyToNumber(value);
 }
 
+function toPositiveDecimal(value: string) {
+  return parseLocaleDecimalNumber(value);
+}
+
 function toInteger(value: string) {
   const numeric = Number.parseInt(onlyDigits(value), 10);
 
@@ -607,14 +613,14 @@ function getDraftValidation(
 
   const debtValid =
     draft.modality === "debt" &&
-    toPositiveNumber(draft.profitability) > 0 &&
+    toPositiveDecimal(draft.profitability) > 0 &&
     Number.parseInt(draft.installments, 10) > 0 &&
     fieldHasText(draft.paymentFrequency);
 
   const equityValid =
     draft.modality === "equity" &&
-    toPositiveNumber(draft.equityPercentage) > 0 &&
-    toPositiveNumber(draft.equityPercentage) <= 100;
+    toPositiveDecimal(draft.equityPercentage) > 0 &&
+    toPositiveDecimal(draft.equityPercentage) <= 100;
 
   const targetValid =
     target >= 100 &&
@@ -1420,9 +1426,9 @@ function FinancialStep({
               />
               {draft.profitability.trim() && (
                 <FieldHint
-                  valid={toPositiveNumber(draft.profitability) > 0}
+                  valid={toPositiveDecimal(draft.profitability) > 0}
                   message={
-                    toPositiveNumber(draft.profitability) > 0
+                    toPositiveDecimal(draft.profitability) > 0
                       ? "Rentabilidade informada."
                       : "Informe uma rentabilidade maior que zero."
                   }
@@ -1478,12 +1484,12 @@ function FinancialStep({
             {draft.equityPercentage.trim() && (
               <FieldHint
                 valid={
-                  toPositiveNumber(draft.equityPercentage) > 0 &&
-                  toPositiveNumber(draft.equityPercentage) <= 100
+                  toPositiveDecimal(draft.equityPercentage) > 0 &&
+                  toPositiveDecimal(draft.equityPercentage) <= 100
                 }
                 message={
-                  toPositiveNumber(draft.equityPercentage) > 0 &&
-                  toPositiveNumber(draft.equityPercentage) <= 100
+                  toPositiveDecimal(draft.equityPercentage) > 0 &&
+                  toPositiveDecimal(draft.equityPercentage) <= 100
                     ? "Participação dentro do intervalo permitido."
                     : "Informe um percentual maior que 0 e menor ou igual a 100."
                 }
@@ -2884,11 +2890,7 @@ export default function CampaignCreatePage() {
           zip_code: brazilSelected ? onlyDigits(draft.zipCode) : draft.zipCode.trim(),
         },
         members: [],
-        monetary: {
-          max_goal: toPositiveNumber(draft.targetAmount),
-          min_investment_value: toPositiveNumber(draft.shareValue),
-          warranty_amount: 0,
-        },
+        monetary: buildOpportunityMonetaryPayload(draft.targetAmount, draft.shareValue),
         opportunity: {
           image_id: imageId,
           segment_id: Number(draft.segment),
@@ -2905,7 +2907,7 @@ export default function CampaignCreatePage() {
         ...(draft.modality === "debt"
           ? {
               debt: {
-                percentage_profitability: toPositiveNumber(draft.profitability),
+                percentage_profitability: toPositiveDecimal(draft.profitability),
                 payment_frequency: draft.paymentFrequency,
                 grace_period: 0,
                 total_installments: toInteger(draft.installments),
@@ -2914,7 +2916,7 @@ export default function CampaignCreatePage() {
             }
           : {
               equity: {
-                participation: toPositiveNumber(draft.equityPercentage),
+                participation: toPositiveDecimal(draft.equityPercentage),
               },
             }),
         warranties: warrantyIds,

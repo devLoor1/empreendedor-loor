@@ -33,7 +33,8 @@ export function formatCep(value: string) {
 
 export function formatBrazilPhone(value: string) {
   const rawDigits = onlyDigits(value);
-  const digits = rawDigits.startsWith("55") && rawDigits.length > 11 ? rawDigits.slice(-11) : rawDigits;
+  const digits =
+    rawDigits.startsWith("55") && rawDigits.length > 11 ? rawDigits.slice(-11) : rawDigits;
   const limited = digits.slice(0, 11);
 
   if (limited.length <= 10) {
@@ -67,25 +68,46 @@ export function normalizeBrazilianMoneyInput(value: string) {
 }
 
 export function parseBrazilianMoneyToNumber(value: string) {
-  const normalizedInput = normalizeBrazilianMoneyInput(value);
-
-  if (!normalizedInput) return 0;
-
-  const hasComma = normalizedInput.includes(",");
-  const validBrazilianPattern = hasComma
-    ? /^(\d+|\d{1,3}(\.\d{3})+),\d{1,2}$/.test(normalizedInput)
-    : /^(\d+|\d{1,3}(\.\d{3})+)$/.test(normalizedInput);
-
-  if (!validBrazilianPattern) return 0;
-
-  const normalized = normalizedInput.replace(/\./g, "").replace(",", ".");
-  const numeric = Number.parseFloat(normalized);
-
-  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+  return parseBrazilianMoneyToCents(value) / 100;
 }
 
 export function parseMoneyToNumber(value: string) {
   return parseBrazilianMoneyToNumber(value);
+}
+
+/** Converts a user-entered BRL amount to the API's integer-cent representation. */
+export function parseBrazilianMoneyToCents(value: string) {
+  const normalizedInput = normalizeBrazilianMoneyInput(value);
+  const match = /^(\d+|\d{1,3}(?:\.\d{3})+)(?:,(\d{1,2}))?$/.exec(normalizedInput);
+
+  if (!match) return 0;
+
+  const wholeReais = Number(match[1].replace(/\./g, ""));
+  const fractionalCents = Number((match[2] ?? "").padEnd(2, "0"));
+  const cents = wholeReais * 100 + fractionalCents;
+
+  return Number.isSafeInteger(cents) && cents > 0 ? cents : 0;
+}
+
+/** Parses an ungrouped decimal typed with either the Brazilian or dot separator. */
+export function parseLocaleDecimalNumber(value: string) {
+  const normalized = value.trim().replace("%", "").trim();
+
+  if (!/^\d+(?:[,.]\d+)?$/.test(normalized)) return 0;
+
+  const numeric = Number(normalized.replace(",", "."));
+
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+const brlCurrencyFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+/** Formats one API cent value as BRL. Call exactly once at the display boundary. */
+export function formatBRLFromCents(cents: number) {
+  return brlCurrencyFormatter.format(Number.isFinite(cents) ? cents / 100 : 0);
 }
 
 export function isValidCepShape(value: string) {

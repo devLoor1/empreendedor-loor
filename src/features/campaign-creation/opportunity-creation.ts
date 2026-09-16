@@ -1,3 +1,5 @@
+import { parseBrazilianMoneyToCents } from "../../utils/br-formatters.ts";
+
 export type CountryReference = {
   id: number;
   name: string;
@@ -69,4 +71,17 @@ export function normalizeSubdivisionForPayload(
 /** Form controls retain string values; API reference fields remain numeric. */
 export function toNumericPayloadId(value: string) {
   return Number(value);
+}
+
+/** Serializes BRL form values once into the Backend's integer-cent contract. */
+export function buildOpportunityMonetaryPayload(
+  maxGoal: string,
+  minInvestmentValue: string,
+  warrantyAmount = "0",
+) {
+  return {
+    max_goal: parseBrazilianMoneyToCents(maxGoal),
+    min_investment_value: parseBrazilianMoneyToCents(minInvestmentValue),
+    warranty_amount: parseBrazilianMoneyToCents(warrantyAmount),
+  };
 }
