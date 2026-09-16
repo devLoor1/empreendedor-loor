@@ -18,6 +18,7 @@ import {
   getOpportunityInvestors,
 } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
 import {
   opportunityDocumentTypeLabel,
   parseOpportunityDocuments,
@@ -75,7 +76,18 @@ type OpportunityDetail = {
   promotional_video_url: string | null;
   whatsapp_group: string | null;
   due_at: string | null;
+  end_at: string | null;
   created_at: string;
+  address?: {
+    country: string;
+    zip_code: string;
+    street_name: string;
+    number: string;
+    district: string;
+    city: string;
+    state: string;
+    complement: string | null;
+  };
   total_investors: number;
   goal: GoalData;
   monetary: MonetaryData;
@@ -155,7 +167,7 @@ export default function CampaignDetail() {
   const paidPct = Math.min(opp.goal.confirmed_payment_percentage, 100);
   const minGoalPct = opp.goal.max_goal > 0 ? Math.min((opp.goal.min_goal / opp.goal.max_goal) * 100, 100) : 0;
   const raisedVsMin = opp.goal.min_goal > 0 ? Math.round((opp.goal.confirmed_payment / opp.goal.min_goal) * 100) : 0;
-  const daysLeft = opp.due_at ? Math.max(0, Math.ceil((new Date(opp.due_at).getTime() - Date.now()) / 86400000)) : 0;
+  const deadlineKnown = parseOpportunityDate(opp.due_at) !== null;
   const st = STATUS_MAP[opp.status] ?? { label: opp.status, variant: "outline" as const };
   const quotaValue = opp.monetary.min_investment_value;
   const totalInvestors = opp.total_investors + anonymous;
@@ -202,7 +214,7 @@ export default function CampaignDetail() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPI icon={TrendingUp} label="Captado" value={formatBRLFromCents(opp.goal.confirmed_payment)} sub={`${paidPct.toFixed(1)}% da meta`} />
         <KPI icon={Users} label="Investidores" value={totalInvestors.toString()} sub={`${opp.total_investors} identificados · ${anonymous} anônimos`} />
-        <KPI icon={Calendar} label="Prazo" value={daysLeft > 0 ? `${daysLeft} dias` : "Encerrada"} sub={opp.due_at ? new Date(opp.due_at).toLocaleDateString("pt-BR") : "—"} />
+        <KPI icon={Calendar} label="Prazo previsto" value={formatOpportunityDate(opp.due_at)} sub={deadlineKnown ? "Definido na aprovação" : "Ainda não definido"} />
         <KPI icon={CreditCard} label="Valor da cota" value={formatBRLFromCents(quotaValue)} sub={`Pend: ${formatBRLFromCents(opp.goal.unconfirmed_payment)}`} />
       </div>
 
@@ -386,7 +398,7 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
             {opp.about && (
               <>
                 <Separator className="my-4" />
-                <h3 className="font-semibold text-foreground mb-3">Sobre a empresa</h3>
+                <h3 className="font-semibold text-foreground mb-3">Sobre a oportunidade</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{opp.about}</p>
               </>
             )}
@@ -437,6 +449,20 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
               </ul>
             </Card>
           )}
+
+          {opp.address && (
+            <Card className="p-6 border-border/60">
+              <h3 className="font-semibold text-foreground mb-3">Endereço da oportunidade</h3>
+              <p className="text-sm text-muted-foreground">
+                {opp.address.street_name}, {opp.address.number}
+                {opp.address.complement ? `, ${opp.address.complement}` : ""}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {opp.address.district} · {opp.address.city}/{opp.address.state} · {opp.address.zip_code} · {opp.address.country}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">Endereço da oferta, independente do endereço cadastrado no perfil.</p>
+            </Card>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -447,15 +473,16 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
             {opp.company_cnpj && <DetailRow icon={FileText} label="CNPJ" value={opp.company_cnpj} />}
             <DetailRow icon={CreditCard} label="Valor da cota" value={formatBRLFromCents(opp.monetary.min_investment_value)} />
             <DetailRow icon={Shield} label="Garantia" value={formatBRLFromCents(opp.monetary.warranty_amount)} />
-            <DetailRow icon={Calendar} label="Abertura" value={opp.created_at ? new Date(opp.created_at).toLocaleDateString("pt-BR") : "—"} />
-            <DetailRow icon={Calendar} label="Encerramento" value={opp.due_at ? new Date(opp.due_at).toLocaleDateString("pt-BR") : "—"} />
+            <DetailRow icon={Calendar} label="Criada em" value={formatOpportunityDate(opp.created_at)} />
+            <DetailRow icon={Calendar} label="Prazo previsto" value={formatOpportunityDate(opp.due_at)} />
+            {parseOpportunityDate(opp.end_at) && <DetailRow icon={Calendar} label="Encerrada em" value={formatOpportunityDate(opp.end_at)} />}
             {opp.modality === "equity" && opp.equity && (
               <DetailRow icon={PieChart} label="Participação" value={`${opp.equity.participation}%`} />
             )}
             {opp.modality === "debt" && opp.debt && (
               <>
                 <DetailRow icon={Percent} label="Rentabilidade" value={`${opp.debt.percentage_profitability ?? "—"}% a.a.`} />
-                <DetailRow icon={Timer} label="Carência" value={`${opp.debt.grace_period ?? "—"} meses`} />
+                <DetailRow icon={Timer} label="Carência cadastrada" value={opp.debt.grace_period == null ? "Não informada" : `${opp.debt.grace_period} meses`} />
                 <DetailRow icon={Banknote} label="Parcelas" value={`${opp.debt.total_installments}x`} />
                 <DetailRow icon={Clock} label="Frequência" value={FREQ_MAP[opp.debt.payment_frequency] ?? opp.debt.payment_frequency} />
               </>
