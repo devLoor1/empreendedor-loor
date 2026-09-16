@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test:documents": "node --experimental-strip-types src/features/documents/document-upload.assertions.ts",
     "test:financial-data": "node --experimental-strip-types src/features/campaign-creation/financial-data.assertions.ts",
+    "test:opportunity-form": "node --experimental-strip-types src/features/campaign-creation/opportunity-form-contract.assertions.ts",
     "test:password-policy": "node --experimental-strip-types src/features/auth/password-policy.assertions.ts",
     "lint": "eslint .",
     "format": "prettier --write ."

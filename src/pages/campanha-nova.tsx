@@ -58,6 +58,11 @@ import {
   toNumericPayloadId,
   type CountryReference,
 } from "@/features/campaign-creation/opportunity-creation";
+import {
+  buildOpportunityContentPayload,
+  OPPORTUNITY_IMAGE_EXTENSIONS,
+  validateOpportunityImage,
+} from "@/features/campaign-creation/opportunity-form-contract";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -78,7 +83,6 @@ import {
   formatUploadSize,
   getUploadAccept,
   normalizeUploadFilename,
-  validateUploadFile,
 } from "@/utils/upload-validation";
 import {
   createOpportunity,
@@ -137,7 +141,8 @@ type CampaignDraft = {
   segment: string;
   resourceUtilization: string;
   shortDescription: string;
-  longDescription: string;
+  about: string;
+  businessName: string;
   videoUrl: string;
   profitability: string;
   installments: string;
@@ -145,8 +150,6 @@ type CampaignDraft = {
   equityPercentage: string;
   targetAmount: string;
   shareValue: string;
-  guarantees: string;
-  teamMembers: string;
   countryId: string;
   zipCode: string;
   state: string;
@@ -163,14 +166,8 @@ type CampaignDraft = {
   pixKey: string;
   privacy: PrivacyMode;
   allowedCpfs: string;
-  cardTitle: string;
-  cardSubtitle: string;
-  cardLongText: string;
-  heroImageNote: string;
   heroImageFile: File | null;
-  galleryNotes: string;
   extraImageFiles: File[];
-  extraVideoUrl: string;
   safeReviewAccepted: boolean;
 };
 
@@ -190,7 +187,8 @@ const INITIAL_DRAFT: CampaignDraft = {
   segment: "",
   resourceUtilization: "",
   shortDescription: "",
-  longDescription: "",
+  about: "",
+  businessName: "",
   videoUrl: "",
   profitability: "",
   installments: "",
@@ -198,8 +196,6 @@ const INITIAL_DRAFT: CampaignDraft = {
   equityPercentage: "",
   targetAmount: "",
   shareValue: "",
-  guarantees: "",
-  teamMembers: "",
   countryId: "",
   zipCode: "",
   state: "",
@@ -216,14 +212,8 @@ const INITIAL_DRAFT: CampaignDraft = {
   pixKey: "",
   privacy: "public",
   allowedCpfs: "",
-  cardTitle: "",
-  cardSubtitle: "",
-  cardLongText: "",
-  heroImageNote: "",
   heroImageFile: null,
-  galleryNotes: "",
   extraImageFiles: [],
-  extraVideoUrl: "",
   safeReviewAccepted: false,
 };
 
@@ -255,7 +245,7 @@ const WIZARD_STEPS: StepConfig[] = [
   {
     id: "operations",
     label: "Operação",
-    description: "Garantias, equipe e endereço",
+    description: "Garantias e endereço",
     icon: UsersRound,
   },
   {
@@ -266,8 +256,8 @@ const WIZARD_STEPS: StepConfig[] = [
   },
   {
     id: "media",
-    label: "Card e mídia",
-    description: "Textos e referências visuais",
+    label: "Mídia",
+    description: "Imagens da oportunidade",
     icon: Image,
   },
   {
@@ -301,13 +291,9 @@ const RESOURCE_UTILIZATION_OPTIONS = [
   { label: "Investimento na oportunidade", value: "investment_in_the_opportunity" },
 ];
 
-const IMAGE_MAX_SIZE = 2 * 1024 * 1024;
-const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png"];
 const SHORT_DESCRIPTION_MIN_LENGTH = 20;
-const LONG_DESCRIPTION_MIN_LENGTH = 80;
-const CARD_TITLE_MIN_LENGTH = 5;
-const CARD_SUBTITLE_MIN_LENGTH = 20;
-const CARD_LONG_TEXT_MIN_LENGTH = 80;
+const ABOUT_MIN_LENGTH = 80;
+const BUSINESS_NAME_MIN_LENGTH = 5;
 
 const SUBMIT_ERROR_FIELD_META: Record<
   string,
@@ -384,9 +370,9 @@ const STEP_BLOCKING_MESSAGES: Record<WizardStep, string> = {
   basics: "Revise os dados básicos: documentos, segmento, uso dos recursos e descrições.",
   financial: "Complete os dados financeiros da modalidade escolhida.",
   target: "Informe meta e valor por cota válidos.",
-  operations: "Complete equipe e endereço da operação.",
+  operations: "Complete o endereço da operação.",
   banking: "Revise banco, agência, conta e chave Pix.",
-  media: "Complete card, textos e imagem principal antes da revisão.",
+  media: "Selecione a imagem principal antes da revisão.",
   review: "Confirme a ação persistente antes do envio final.",
 };
 
@@ -521,15 +507,6 @@ function isValidDocument(value: string, type: DocumentType) {
   return onlyDigits(value).length === (type === "cnpj" ? 14 : 11);
 }
 
-function validateImage(file: File) {
-  return validateUploadFile(file, {
-    allowedExtensions: IMAGE_EXTENSIONS,
-    maxSizeBytes: IMAGE_MAX_SIZE,
-    invalidTypeMessage: "Use uma imagem PNG, JPG ou JPEG.",
-    maxSizeMessage: "A imagem deve ter até 2 MB.",
-  });
-}
-
 function getImageFileSummary(file: File) {
   return `${file.name} · ${formatUploadSize(file.size)}`;
 }
@@ -609,7 +586,8 @@ function getDraftValidation(
     fieldHasText(draft.resourceUtilization) &&
     isValidOptionalUrl(draft.videoUrl) &&
     fieldHasText(draft.shortDescription, SHORT_DESCRIPTION_MIN_LENGTH) &&
-    fieldHasText(draft.longDescription, LONG_DESCRIPTION_MIN_LENGTH);
+    fieldHasText(draft.about, ABOUT_MIN_LENGTH) &&
+    fieldHasText(draft.businessName, BUSINESS_NAME_MIN_LENGTH);
 
   const debtValid =
     draft.modality === "debt" &&
@@ -632,7 +610,6 @@ function getDraftValidation(
   const selectedCountry = countries.find((country) => String(country.id) === draft.countryId) ?? null;
   const brazilSelected = isBrazilCountry(selectedCountry);
   const operationsValid =
-    fieldHasText(draft.teamMembers, 10) &&
     Boolean(draft.countryId) &&
     hasReferenceId(countries, draft.countryId) &&
     (brazilSelected ? isValidCepShape(draft.zipCode) : fieldHasText(draft.zipCode)) &&
@@ -650,12 +627,7 @@ function getDraftValidation(
     isValidPix(draft.pixType, draft.pixKey) &&
     (draft.privacy === "public" || fieldHasText(draft.allowedCpfs, 11));
 
-  const mediaValid =
-    fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH) &&
-    fieldHasText(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH) &&
-    fieldHasText(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH) &&
-    draft.heroImageFile !== null &&
-    isValidOptionalUrl(draft.extraVideoUrl);
+  const mediaValid = draft.heroImageFile !== null;
 
   const requiredValid = [
     draft.modality !== null,
@@ -708,24 +680,8 @@ function getCharacterHint(value: string, minLength: number, maxLength?: number) 
 function getMediaPendingItems(draft: CampaignDraft) {
   const pending: string[] = [];
 
-  if (!fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH)) {
-    pending.push(`Título do card: informe pelo menos ${CARD_TITLE_MIN_LENGTH} caracteres.`);
-  }
-
-  if (!fieldHasText(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH)) {
-    pending.push(`Texto curto: informe pelo menos ${CARD_SUBTITLE_MIN_LENGTH} caracteres.`);
-  }
-
-  if (!fieldHasText(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH)) {
-    pending.push(`Texto longo: informe pelo menos ${CARD_LONG_TEXT_MIN_LENGTH} caracteres.`);
-  }
-
   if (!draft.heroImageFile) {
-    pending.push("Imagem principal: selecione um arquivo PNG/JPG até 2 MB.");
-  }
-
-  if (draft.extraVideoUrl.trim() && !isValidOptionalUrl(draft.extraVideoUrl)) {
-    pending.push("URL complementar: informe uma URL completa ou deixe o campo vazio.");
+    pending.push("Imagem principal: selecione um arquivo PNG/JPG até 20 MiB.");
   }
 
   return pending;
@@ -1345,14 +1301,27 @@ function BasicsStep({
         </FormField>
 
         <FormField
-          id="longDescription"
-          label="Descrição longa"
-          hint={getCharacterHint(draft.longDescription, LONG_DESCRIPTION_MIN_LENGTH)}
+          id="businessName"
+          label="Nome empresarial da oportunidade"
+          hint="Gravado como business_name da oportunidade; não altera o perfil."
+        >
+          <Input
+            id="businessName"
+            value={draft.businessName}
+            onChange={(event) => onPatch({ businessName: event.target.value })}
+            placeholder="Nome da empresa vinculada a esta oferta"
+          />
+        </FormField>
+
+        <FormField
+          id="about"
+          label="Sobre a oportunidade"
+          hint={getCharacterHint(draft.about, ABOUT_MIN_LENGTH)}
         >
           <Textarea
-            id="longDescription"
-            value={draft.longDescription}
-            onChange={(event) => onPatch({ longDescription: event.target.value })}
+            id="about"
+            value={draft.about}
+            onChange={(event) => onPatch({ about: event.target.value })}
             placeholder="Explique contexto, tese, uso dos recursos e diferenciais da oportunidade."
             className="min-h-32"
           />
@@ -1705,21 +1674,12 @@ function OperationsStep({
         <Badge variant="secondary" className="w-fit">
           Etapa 5
         </Badge>
-        <CardTitle>Garantias, equipe e endereço</CardTitle>
+        <CardTitle>Garantias e endereço</CardTitle>
         <CardDescription>
-          Dados operacionais em rascunho local para completar a experiência do fluxo.
+          A garantia cadastrada e o endereço são enviados com a oportunidade.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <FormField id="guarantees" label="Garantias opcionais">
-          <Textarea
-            id="guarantees"
-            value={draft.guarantees}
-            onChange={(event) => onPatch({ guarantees: event.target.value })}
-            placeholder="Descreva garantias, mitigadores de risco ou deixe em branco."
-          />
-        </FormField>
-
         <FormField
           id="warrantyId"
           label="Garantia cadastrada"
@@ -1738,19 +1698,6 @@ function OperationsStep({
               ))}
             </SelectContent>
           </Select>
-        </FormField>
-
-        <FormField
-          id="teamMembers"
-          label="Equipe responsável"
-          hint="Informe nomes/cargos sintéticos ou autorizados."
-        >
-          <Textarea
-            id="teamMembers"
-            value={draft.teamMembers}
-            onChange={(event) => onPatch({ teamMembers: event.target.value })}
-            placeholder="Ex.: Diretoria financeira, operações, jurídico."
-          />
         </FormField>
 
         <FormField
@@ -2063,7 +2010,7 @@ function BankingStep({
           canContinue={canContinue}
           onBack={onBack}
           onContinue={onContinue}
-          continueLabel="Continuar para card"
+          continueLabel="Continuar para mídia"
         />
       </CardContent>
     </Card>
@@ -2099,8 +2046,6 @@ function MediaStep({
     [draft.extraImageFiles],
   );
   const mediaPendingItems = getMediaPendingItems(draft);
-  const cardTitleLength = draft.cardTitle.trim().length;
-  const cardTitleValid = fieldHasText(draft.cardTitle, CARD_TITLE_MIN_LENGTH);
 
   useEffect(() => {
     return () => {
@@ -2117,7 +2062,7 @@ function MediaStep({
   const handleHeroImageFile = (file: File | undefined) => {
     if (!file) return;
 
-    const result = validateImage(file);
+    const result = validateOpportunityImage(file);
 
     if (!result.file) {
       const message = result.error || "Não foi possível usar esta imagem.";
@@ -2140,7 +2085,7 @@ function MediaStep({
     const errors: string[] = [];
 
     for (const file of files.slice(0, 3)) {
-      const result = validateImage(file);
+      const result = validateOpportunityImage(file);
 
       if (!result.file) {
         errors.push(`${file.name}: ${result.error}`);
@@ -2178,64 +2123,22 @@ function MediaStep({
         <Badge variant="secondary" className="w-fit">
           Etapa 7
         </Badge>
-        <CardTitle>Card, textos e mídia</CardTitle>
+        <CardTitle>Imagens da oportunidade</CardTitle>
         <CardDescription>
-          Monte a apresentação da campanha. A imagem principal será enviada antes da criação.
+          A imagem principal e até três extras serão enviadas antes da criação.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField id="cardTitle" label="Título do card">
-            <div className="space-y-1.5">
-              <Input
-                id="cardTitle"
-                value={draft.cardTitle}
-                onChange={(event) => onPatch({ cardTitle: event.target.value })}
-                placeholder="Título comercial da campanha"
-                aria-invalid={!cardTitleValid}
-                className={cn(
-                  !cardTitleValid &&
-                    "border-destructive focus-visible:ring-destructive/40",
-                )}
-              />
-              <FieldHint
-                valid={cardTitleValid}
-                message={`${cardTitleLength}/${CARD_TITLE_MIN_LENGTH} caracteres mínimos · ${
-                  cardTitleValid ? "mínimo atingido" : "mínimo pendente"
-                }`}
-              />
-              {!cardTitleValid && (
-                <p className="text-xs leading-relaxed text-destructive">
-                  Informe um título com pelo menos {CARD_TITLE_MIN_LENGTH} caracteres.
-                </p>
-              )}
-            </div>
-          </FormField>
-
-          <FormField
-            id="heroImageNote"
-            label="Descrição da imagem principal"
-            hint="A descrição ajuda na revisão visual; o arquivo abaixo será enviado para gerar image_id."
-          >
-            <Input
-              id="heroImageNote"
-              value={draft.heroImageNote}
-              onChange={(event) => onPatch({ heroImageNote: event.target.value })}
-              placeholder="Ex.: fachada, produto, operação"
-            />
-          </FormField>
-        </div>
-
         <FormField
           id="heroImageFile"
           label="Arquivo da imagem principal"
-          hint="Obrigatório para criar a oportunidade. PNG/JPG até 2 MB; extensão final normalizada para lowercase."
+          hint="Obrigatório para criar a oportunidade. PNG/JPG até 20 MiB; extensão final normalizada para lowercase."
         >
           <FileUploadCard
             id="heroImageFile"
-            accept={getUploadAccept(IMAGE_EXTENSIONS)}
+            accept={getUploadAccept(OPPORTUNITY_IMAGE_EXTENSIONS)}
             title="Selecionar imagem principal"
-            description="PNG, JPG ou JPEG até 2 MB. A imagem só é enviada no envio final."
+            description="PNG, JPG ou JPEG até 20 MiB. A imagem só é enviada no envio final."
             file={draft.heroImageFile}
             previewUrl={heroPreviewUrl}
             imageAlt="Prévia da imagem principal da campanha"
@@ -2252,57 +2155,17 @@ function MediaStep({
           )}
         </FormField>
 
-        <FormField
-          id="cardSubtitle"
-          label="Texto curto do card"
-          hint={getCharacterHint(draft.cardSubtitle, CARD_SUBTITLE_MIN_LENGTH)}
-        >
-          <Input
-            id="cardSubtitle"
-            value={draft.cardSubtitle}
-            onChange={(event) => onPatch({ cardSubtitle: event.target.value })}
-            placeholder="Resumo para listagem e card."
-          />
-        </FormField>
-
-        <FormField
-          id="cardLongText"
-          label="Texto longo da campanha"
-          hint={getCharacterHint(draft.cardLongText, CARD_LONG_TEXT_MIN_LENGTH)}
-        >
-          <Textarea
-            id="cardLongText"
-            value={draft.cardLongText}
-            onChange={(event) => onPatch({ cardLongText: event.target.value })}
-            placeholder="Texto de apresentação para investidores, riscos, contexto e uso dos recursos."
-            className="min-h-32"
-          />
-        </FormField>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            id="galleryNotes"
-            label="Observações das imagens extras"
-            hint="Opcional. Até três arquivos extras podem ser enviados abaixo."
-          >
-            <Textarea
-              id="galleryNotes"
-              value={draft.galleryNotes}
-              onChange={(event) => onPatch({ galleryNotes: event.target.value })}
-              placeholder="Ex.: operação, equipe, documentos, localização."
-            />
-          </FormField>
-
+        <div>
           <FormField
             id="extraImageFiles"
             label="Imagens extras"
-            hint="Opcional. PNG/JPG até 2 MB cada."
+            hint="Opcional. PNG/JPG até 20 MiB cada."
           >
             <Input
               ref={extraImageInputRef}
               id="extraImageFiles"
               type="file"
-              accept={`${getUploadAccept(IMAGE_EXTENSIONS)},image/jpeg,image/png`}
+              accept={`${getUploadAccept(OPPORTUNITY_IMAGE_EXTENSIONS)},image/jpeg,image/png`}
               multiple
               onChange={handleExtraImages}
               className="sr-only"
@@ -2321,7 +2184,7 @@ function MediaStep({
               <Image className="mb-2 h-5 w-5 text-primary" />
               <span>Selecionar imagens extras</span>
               <span id="extraImageFilesHelp" className="mt-1 text-xs font-normal text-muted-foreground">
-                Até 3 imagens, PNG/JPG/JPEG, 2 MB cada. Selecionar novamente substitui a lista.
+                Até 3 imagens, PNG/JPG/JPEG, 20 MiB cada. Selecionar novamente substitui a lista.
               </span>
             </Button>
             {extraUploadError && (
@@ -2346,30 +2209,12 @@ function MediaStep({
             )}
           </FormField>
 
-          <FormField id="extraVideoUrl" label="Vídeo complementar">
-            <Input
-              id="extraVideoUrl"
-              value={draft.extraVideoUrl}
-              onChange={(event) => onPatch({ extraVideoUrl: event.target.value })}
-              placeholder="https://..."
-            />
-            {draft.extraVideoUrl.trim() && (
-              <FieldHint
-                valid={isValidOptionalUrl(draft.extraVideoUrl)}
-                message={
-                  isValidOptionalUrl(draft.extraVideoUrl)
-                    ? "URL de vídeo complementar válida."
-                    : "Informe uma URL completa ou deixe o campo vazio."
-                }
-              />
-            )}
-          </FormField>
         </div>
 
         {!canContinue && (
           <Alert>
             <CircleAlert className="h-4 w-4" />
-            <AlertTitle>Card e mídia incompletos</AlertTitle>
+            <AlertTitle>Imagem principal pendente</AlertTitle>
             <AlertDescription>
               <p>Resolva as pendências abaixo antes de seguir para a revisão:</p>
               <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -2465,8 +2310,8 @@ function ReviewStep({
 
         <CampaignPublishedPreview
           imageUrl={heroPreviewUrl}
-          title={draft.cardTitle}
-          shortText={draft.cardSubtitle || draft.shortDescription}
+          title={draft.opportunityName}
+          shortText={draft.shortDescription}
           segment={getOptionName(segments, draft.segment)}
           modality={draft.modality ? modalityLabel[draft.modality] : "Modalidade pendente"}
           target={formatCurrency(toPositiveNumber(draft.targetAmount))}
@@ -2512,10 +2357,7 @@ function ReviewStep({
               label="Endereço"
               value={`${draft.street || "-"}, ${draft.number || "-"}`}
             />
-            <SummaryItem
-              label="Equipe"
-              value={fieldHasText(draft.teamMembers) ? "Informada" : "Pendente"}
-            />
+            <SummaryItem label="Nome empresarial" value={draft.businessName || "Não informado"} />
           </SummaryCard>
 
           <SummaryCard title="Conta e exposição" icon={CreditCard}>
@@ -2530,9 +2372,8 @@ function ReviewStep({
             />
           </SummaryCard>
 
-          <SummaryCard title="Card" icon={Video}>
-            <SummaryItem label="Título" value={draft.cardTitle || "Não informado"} />
-            <SummaryItem label="Texto curto" value={draft.cardSubtitle || "Não informado"} />
+          <SummaryCard title="Mídia" icon={Video}>
+            <SummaryItem label="Descrição curta" value={draft.shortDescription || "Não informado"} />
             <SummaryItem
               label="Mídia"
               value={draft.heroImageFile ? getImageFileSummary(draft.heroImageFile) : "Pendente"}
@@ -2891,19 +2732,7 @@ export default function CampaignCreatePage() {
         },
         members: [],
         monetary: buildOpportunityMonetaryPayload(draft.targetAmount, draft.shareValue),
-        opportunity: {
-          image_id: imageId,
-          segment_id: Number(draft.segment),
-          about: draft.cardLongText.trim() || draft.longDescription.trim(),
-          business_name: draft.cardTitle.trim() || draft.opportunityName.trim(),
-          company_cnpj: onlyDigits(draft.documentNumber),
-          cpf: onlyDigits(draft.responsibleCpf),
-          promotional_video_url: draft.videoUrl.trim() || draft.extraVideoUrl.trim() || null,
-          description: draft.shortDescription.trim(),
-          name: draft.opportunityName.trim(),
-          resource_utilization: draft.resourceUtilization,
-          spe_cnpj: onlyDigits(draft.speCnpj),
-        },
+        opportunity: buildOpportunityContentPayload(draft, imageId),
         ...(draft.modality === "debt"
           ? {
               debt: {
