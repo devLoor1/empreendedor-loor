@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignCreateButton } from "@/components/campaign-launch-guard";
 import { EmptyState } from "@/components/empty-state";
+import { formatBRLFromCents } from "@/utils/br-formatters";
 import { Users, Calendar, TrendingUp, CheckCircle2, Archive, Megaphone, type LucideIcon } from "lucide-react";
 import {
   getActiveOpportunities,
@@ -42,10 +43,6 @@ type SimpleOpp = {
   end_at?: string;
   reason_for_archiving?: string | null;
 };
-
-function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 export default function CampaignsPage() {
   const [active, setActive] = useState<ActiveOpp[]>([]);
@@ -103,16 +100,16 @@ export default function CampaignsPage() {
                     </div>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Meta mín: {formatBRL(c.goal.min_goal)}</span>
-                        <span>Meta máx: {formatBRL(c.goal.max_goal)}</span>
+                        <span>Meta mín: {formatBRLFromCents(c.goal.min_goal)}</span>
+                        <span>Meta máx: {formatBRLFromCents(c.goal.max_goal)}</span>
                       </div>
                       <div className="relative h-2 rounded-full bg-muted overflow-hidden">
                         <div className="absolute left-0 top-0 h-full bg-primary rounded-full" style={{ width: `${paidPct}%` }} />
                         <div className="absolute top-0 h-full bg-primary/30 rounded-full" style={{ left: `${paidPct}%`, width: `${pendingPct}%` }} />
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-primary font-medium">{formatBRL(c.goal.confirmed_payment)} ({paidPct.toFixed(1)}%)</span>
-                        <span className="text-muted-foreground">{formatBRL(c.goal.unconfirmed_payment)} pend.</span>
+                        <span className="text-primary font-medium">{formatBRLFromCents(c.goal.confirmed_payment)} ({paidPct.toFixed(1)}%)</span>
+                        <span className="text-muted-foreground">{formatBRLFromCents(c.goal.unconfirmed_payment)} pend.</span>
                       </div>
                     </div>
                     <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs text-muted-foreground">

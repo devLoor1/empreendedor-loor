@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CampaignCreateButton } from "@/components/campaign-launch-guard";
 import { EmptyState } from "@/components/empty-state";
+import { formatBRLFromCents } from "@/utils/br-formatters";
 import { Building2, FileCheck2, Megaphone, TrendingUp, Users, BarChart3, AlertCircle, type LucideIcon } from "lucide-react";
 
 type Opportunity = {
@@ -35,10 +36,6 @@ type HomeData = {
 };
 
 const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-
-function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -87,7 +84,7 @@ export default function Dashboard() {
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Stat label="Campanhas ativas" value={String(data?.active_opportunities ?? 0)} icon={Megaphone} />
-        <Stat label="Total captado" value={formatBRL(data?.total_invested ?? 0)} icon={TrendingUp} />
+        <Stat label="Total captado" value={formatBRLFromCents(data?.total_invested ?? 0)} icon={TrendingUp} />
         <Stat label="Investidores" value={String(data?.total_investors ?? 0)} icon={Users} />
       </div>
 
@@ -145,7 +142,7 @@ export default function Dashboard() {
                     <div
                       className="w-full rounded-t bg-primary/80 group-hover:bg-primary transition-colors relative"
                       style={{ height: `${Math.max(pct, val > 0 ? 4 : 0)}%` }}
-                      title={val > 0 ? formatBRL(val) : undefined}
+                      title={val > 0 ? formatBRLFromCents(val) : undefined}
                     />
                     <span className="text-[10px] text-muted-foreground">{MONTHS[m - 1]}</span>
                   </div>
@@ -192,16 +189,16 @@ function OpportunityCard({ opp }: { opp: Opportunity }) {
       </div>
       <div className="space-y-1.5">
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>Meta mínima: {formatBRL(opp.min_goal)}</span>
-          <span>Meta máxima: {formatBRL(opp.max_goal)}</span>
+          <span>Meta mínima: {formatBRLFromCents(opp.min_goal)}</span>
+          <span>Meta máxima: {formatBRLFromCents(opp.max_goal)}</span>
         </div>
         <div className="relative h-2 rounded-full bg-muted overflow-hidden">
           <div className="absolute left-0 top-0 h-full bg-primary rounded-full" style={{ width: `${paidPct}%` }} />
           <div className="absolute top-0 h-full bg-primary/30 rounded-full" style={{ left: `${paidPct}%`, width: `${pendingPct}%` }} />
         </div>
         <div className="flex justify-between text-xs">
-          <span className="text-primary font-medium">{formatBRL(opp.confirmed_payment)} confirmado ({paidPct.toFixed(1)}%)</span>
-          <span className="text-muted-foreground">{formatBRL(opp.unconfirmed_payment)} pendente</span>
+          <span className="text-primary font-medium">{formatBRLFromCents(opp.confirmed_payment)} confirmado ({paidPct.toFixed(1)}%)</span>
+          <span className="text-muted-foreground">{formatBRLFromCents(opp.unconfirmed_payment)} pendente</span>
         </div>
       </div>
       <p className="text-xs text-muted-foreground">Encerramento: {dueDate}</p>

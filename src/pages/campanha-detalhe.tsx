@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getOpportunity, getOpportunityInvestors } from "@/services/api";
+import { formatBRLFromCents } from "@/utils/br-formatters";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,10 +104,6 @@ const FREQ_MAP: Record<string, string> = {
   at_maturity: "No vencimento",
 };
 
-function formatBRL(value: number) {
-  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function CampaignDetail() {
@@ -179,7 +176,7 @@ export default function CampaignDetail() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
           <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
             <div>
-              <p className="text-white text-xl font-bold">{formatBRL(opp.goal.confirmed_payment)} captados</p>
+              <p className="text-white text-xl font-bold">{formatBRLFromCents(opp.goal.confirmed_payment)} captados</p>
             </div>
             {opp.promotional_video_url && (
               <a href={opp.promotional_video_url} target="_blank" rel="noopener noreferrer">
@@ -192,10 +189,10 @@ export default function CampaignDetail() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPI icon={TrendingUp} label="Captado" value={formatBRL(opp.goal.confirmed_payment)} sub={`${paidPct.toFixed(1)}% da meta`} />
+        <KPI icon={TrendingUp} label="Captado" value={formatBRLFromCents(opp.goal.confirmed_payment)} sub={`${paidPct.toFixed(1)}% da meta`} />
         <KPI icon={Users} label="Investidores" value={totalInvestors.toString()} sub={`${opp.total_investors} identificados · ${anonymous} anônimos`} />
         <KPI icon={Calendar} label="Prazo" value={daysLeft > 0 ? `${daysLeft} dias` : "Encerrada"} sub={opp.due_at ? new Date(opp.due_at).toLocaleDateString("pt-BR") : "—"} />
-        <KPI icon={CreditCard} label="Valor da cota" value={formatBRL(quotaValue)} sub={`Pend: ${formatBRL(opp.goal.unconfirmed_payment)}`} />
+        <KPI icon={CreditCard} label="Valor da cota" value={formatBRLFromCents(quotaValue)} sub={`Pend: ${formatBRLFromCents(opp.goal.unconfirmed_payment)}`} />
       </div>
 
       {/* Fundraising Progress */}
@@ -211,13 +208,13 @@ export default function CampaignDetail() {
           <div
             className="absolute top-0 h-4 border-l-2 border-dashed border-warning"
             style={{ left: `${minGoalPct}%` }}
-            title={`Meta mínima: ${formatBRL(opp.goal.min_goal)}`}
+            title={`Meta mínima: ${formatBRLFromCents(opp.goal.min_goal)}`}
           />
         </div>
         <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-          <span>{formatBRL(opp.goal.confirmed_payment)} confirmados</span>
-          <span>Meta mín. {formatBRL(opp.goal.min_goal)} ({raisedVsMin}%)</span>
-          <span>Meta máx. {formatBRL(opp.goal.max_goal)}</span>
+          <span>{formatBRLFromCents(opp.goal.confirmed_payment)} confirmados</span>
+          <span>Meta mín. {formatBRLFromCents(opp.goal.min_goal)} ({raisedVsMin}%)</span>
+          <span>Meta máx. {formatBRLFromCents(opp.goal.max_goal)}</span>
         </div>
       </Card>
 
@@ -343,8 +340,8 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
             <h3 className="font-semibold text-foreground text-sm">Detalhes da Oferta</h3>
             <DetailRow icon={Building2} label="Empresa" value={opp.business_name} />
             {opp.company_cnpj && <DetailRow icon={FileText} label="CNPJ" value={opp.company_cnpj} />}
-            <DetailRow icon={CreditCard} label="Valor da cota" value={formatBRL(opp.monetary.min_investment_value)} />
-            <DetailRow icon={Shield} label="Garantia" value={formatBRL(opp.monetary.warranty_amount)} />
+            <DetailRow icon={CreditCard} label="Valor da cota" value={formatBRLFromCents(opp.monetary.min_investment_value)} />
+            <DetailRow icon={Shield} label="Garantia" value={formatBRLFromCents(opp.monetary.warranty_amount)} />
             <DetailRow icon={Calendar} label="Abertura" value={opp.created_at ? new Date(opp.created_at).toLocaleDateString("pt-BR") : "—"} />
             <DetailRow icon={Calendar} label="Encerramento" value={opp.due_at ? new Date(opp.due_at).toLocaleDateString("pt-BR") : "—"} />
             {opp.modality === "equity" && opp.equity && (
@@ -423,7 +420,7 @@ function InvestorsTab({ investors, anonymous }: { investors: InvestorData[]; ano
         </Card>
         <Card className="p-4 border-border/60 text-center">
           <p className="text-xs text-muted-foreground uppercase">Total captado</p>
-          <p className="text-2xl font-bold text-success">{formatBRL(totalInvested)}</p>
+          <p className="text-2xl font-bold text-success">{formatBRLFromCents(totalInvested)}</p>
         </Card>
       </div>
 
@@ -447,7 +444,7 @@ function InvestorsTab({ investors, anonymous }: { investors: InvestorData[]; ano
                   <td className="p-3 text-muted-foreground text-xs">
                     {inv.city && inv.state ? `${inv.city} / ${inv.state}` : inv.country ?? "—"}
                   </td>
-                  <td className="p-3 text-right font-medium text-foreground">{formatBRL(inv.total_invested)}</td>
+                  <td className="p-3 text-right font-medium text-foreground">{formatBRLFromCents(inv.total_invested)}</td>
                 </tr>
               ))}
               {anonymous > 0 && (
@@ -545,7 +542,7 @@ function EquityTab({ equity, goal, investors }: { equity: EquityData; goal: Goal
             <Banknote className="w-4 h-4" />
             <span className="text-xs uppercase">Valuation implícito</span>
           </div>
-          <p className="text-xl font-bold text-foreground">{formatBRL(valuation)}</p>
+          <p className="text-xl font-bold text-foreground">{formatBRLFromCents(valuation)}</p>
           <p className="text-xs text-muted-foreground">pre-money</p>
         </Card>
         <Card className="p-4 border-border/60">
@@ -596,7 +593,7 @@ function EquityTab({ equity, goal, investors }: { equity: EquityData; goal: Goal
                     <td className="p-3 text-xs text-muted-foreground">
                       {inv.city && inv.state ? `${inv.city} / ${inv.state}` : "—"}
                     </td>
-                    <td className="p-3 text-right font-medium text-foreground">{formatBRL(inv.total_invested)}</td>
+                    <td className="p-3 text-right font-medium text-foreground">{formatBRLFromCents(inv.total_invested)}</td>
                   </tr>
                 ))}
               </tbody>
