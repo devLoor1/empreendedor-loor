@@ -1,13 +1,17 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft, Users, Calendar, TrendingUp, Building2, Shield, ExternalLink,
   Play, PieChart, Banknote, Clock, CheckCircle2, AlertCircle, CircleDollarSign,
   Percent, Timer, CreditCard, FileText, Share2, MessageCircle, Download,
+  type LucideIcon,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,6 +20,7 @@ import {
   getOpportunity,
   getOpportunityDocuments,
   getOpportunityInvestors,
+  updateOpportunity,
 } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
@@ -25,6 +30,13 @@ import {
   safeOpportunityDocumentUrl,
   type OpportunityDocument,
 } from "@/features/campaign-documents/opportunity-documents";
+import {
+  buildOwnerContentPatch,
+  canEditOwnerContent,
+  ownerContentReadbackMatches,
+  toOwnerContentDraft,
+  type OwnerContentPatch,
+} from "@/features/campaign-edit/owner-content-edit";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -252,6 +264,7 @@ export default function CampaignDetail() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-4">
+          <OpportunityContentEditor opportunity={opp} onReadback={setOpp} />
           <OverviewTab opp={opp} />
         </TabsContent>
 
@@ -276,6 +289,179 @@ export default function CampaignDetail() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+function opportunityEditError(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const response = error as { message?: string; errors?: Array<{ message?: string }> };
+    return response.errors?.[0]?.message || response.message || "Não foi possível salvar as alterações.";
+  }
+  return "Não foi possível salvar as alterações.";
+}
+
+function OpportunityContentEditor({
+  opportunity,
+  onReadback,
+}: {
+  opportunity: OpportunityDetail;
+  onReadback: (value: OpportunityDetail) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(() => toOwnerContentDraft(opportunity));
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [pendingPatch, setPendingPatch] = useState<OwnerContentPatch | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const editable = canEditOwnerContent(opportunity.status);
+
+  async function confirmReadback(patch: OwnerContentPatch) {
+    const response = await getOpportunity(opportunity.id);
+    const current = response.data as OpportunityDetail;
+    if (!ownerContentReadbackMatches(opportunity, patch, current)) {
+      throw new Error("O servidor não confirmou os valores salvos. Consulte o estado antes de tentar salvar novamente.");
+    }
+    onReadback(current);
+    setDraft(toOwnerContentDraft(current));
+    setPendingPatch(null);
+    setEditing(false);
+    setSuccess(true);
+    setError("");
+  }
+
+  async function save() {
+    if (savingRef.current || pendingPatch || !editable) return;
+    const patch = buildOwnerContentPatch(opportunity, draft);
+    if (Object.keys(patch).length === 0) {
+      setEditing(false);
+      setError("");
+      return;
+    }
+    if ((patch.about !== undefined && !patch.about) ||
+        (patch.description !== undefined && !patch.description)) {
+      setError("Descrição e sobre a oportunidade não podem ficar vazios.");
+      return;
+    }
+    if (patch.promotional_video_url) {
+      try {
+        const host = new URL(patch.promotional_video_url).hostname.toLowerCase();
+        if (!["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"].includes(host)) {
+          throw new Error("Invalid YouTube host");
+        }
+      } catch {
+        setError("Informe um link válido do YouTube ou deixe o campo vazio.");
+        return;
+      }
+    }
+
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    setSuccess(false);
+    let patchSent = false;
+    try {
+      const before = await getOpportunity(opportunity.id);
+      const current = before.data as OpportunityDetail;
+      if (current.id !== opportunity.id || !canEditOwnerContent(current.status)) {
+        setError("Esta oportunidade não está mais disponível para edição. Recarregue a página.");
+        return;
+      }
+      if (current.about !== opportunity.about ||
+          current.description !== opportunity.description ||
+          current.promotional_video_url !== opportunity.promotional_video_url) {
+        onReadback(current);
+        setDraft(toOwnerContentDraft(current));
+        setError("Os dados foram alterados em outra sessão. Revise o conteúdo atualizado antes de salvar.");
+        return;
+      }
+      await updateOpportunity(opportunity.id, patch);
+      patchSent = true;
+      setPendingPatch(patch);
+      await confirmReadback(patch);
+    } catch (cause) {
+      setError(patchSent
+        ? `A alteração foi enviada, mas a leitura ainda não foi confirmada. ${opportunityEditError(cause)}`
+        : opportunityEditError(cause));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  async function retryReadback() {
+    if (!pendingPatch || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await confirmReadback(pendingPatch);
+    } catch (cause) {
+      setError(opportunityEditError(cause));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card className="p-5 border-border/60 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-foreground">Conteúdo da oportunidade</h3>
+          <p className="text-sm text-muted-foreground">
+            {editable
+              ? "Descrição, apresentação e vídeo podem ser ajustados enquanto a oportunidade está em análise ou ativa."
+              : "A edição deste conteúdo não está disponível para esta etapa da oportunidade."}
+          </p>
+        </div>
+        {editable && !editing && !pendingPatch && (
+          <Button variant="outline" onClick={() => {
+            setDraft(toOwnerContentDraft(opportunity));
+            setError("");
+            setSuccess(false);
+            setEditing(true);
+          }}>Editar conteúdo</Button>
+        )}
+      </div>
+      {editing && !pendingPatch && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-description">Descrição</Label>
+            <Textarea id="opportunity-description" value={draft.description}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-about">Sobre a oportunidade</Label>
+            <Textarea id="opportunity-about" value={draft.about}
+              onChange={(event) => setDraft({ ...draft, about: event.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-video">Vídeo promocional (YouTube)</Label>
+            <Input id="opportunity-video" type="url" value={draft.promotional_video_url}
+              onChange={(event) => setDraft({ ...draft, promotional_video_url: event.target.value })} />
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={save} disabled={saving}>{saving ? "Salvando..." : "Salvar conteúdo"}</Button>
+            <Button variant="outline" disabled={saving} onClick={() => {
+              setDraft(toOwnerContentDraft(opportunity));
+              setEditing(false);
+              setError("");
+            }}>Cancelar</Button>
+          </div>
+        </div>
+      )}
+      {pendingPatch && (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">A alteração foi enviada; a confirmação de leitura ainda está pendente. Não envie novamente.</p>
+          <Button variant="outline" disabled={saving} onClick={retryReadback}>
+            {saving ? "Consultando..." : "Tentar confirmar leitura"}
+          </Button>
+        </div>
+      )}
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {success && <p role="status" className="text-sm text-success">Conteúdo salvo e confirmado pela leitura da oportunidade.</p>}
+    </Card>
   );
 }
 
@@ -370,7 +556,7 @@ function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
 
 /* ─── KPI Card ─────────────────────────────────────────────────────────────── */
 
-function KPI({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub: string }) {
+function KPI({ icon: Icon, label, value, sub }: { icon: LucideIcon; label: string; value: string; sub: string }) {
   return (
     <Card className="p-4 border-border/60">
       <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -522,7 +708,7 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
   );
 }
 
-function DetailRow({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function DetailRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="flex items-center gap-2 text-muted-foreground text-sm">
