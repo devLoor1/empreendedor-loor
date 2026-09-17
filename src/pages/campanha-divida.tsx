@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft, Percent, Clock, Banknote, AlertCircle, CheckCircle2, Timer, Calendar,
   QrCode, FlaskConical, X, Copy, RefreshCw,
@@ -10,10 +10,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDebt, getDebtSummary, payNextInstallment, debtSimulatePayment } from "@/services/api";
+import { getDebt, getDebtSummary, updateDebtSchedule, payNextInstallment, debtSimulatePayment } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import {
   formatDebtSummaryDate,
+  isIsoDate,
   parseDebtSummary,
   type DebtSummary,
 } from "@/features/campaign-debt/debt-summary";
@@ -80,6 +81,7 @@ type DebtDetail = {
   percentageProfitability: string | null;
   paymentFrequency: string;
   gracePeriod: number | null;
+  paymentStartAt: string | null;
   totalInstallments: number;
   singleInstallment: boolean | null;
   status: string;
@@ -116,6 +118,13 @@ export default function CampaignDebtPage() {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState(false);
   const [summaryRetry, setSummaryRetry] = useState(0);
+  const [scheduleEditing, setScheduleEditing] = useState(false);
+  const [paymentStartDraft, setPaymentStartDraft] = useState("");
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const scheduleSavingRef = useRef(false);
+  const [pendingDateReadback, setPendingDateReadback] = useState<string | null | undefined>(undefined);
+  const [scheduleError, setScheduleError] = useState("");
+  const [scheduleSuccess, setScheduleSuccess] = useState(false);
 
   const reload = useCallback(() => {
     if (!id) return;
@@ -129,6 +138,13 @@ export default function CampaignDebtPage() {
   }, [id]);
 
   useEffect(() => { reload(); }, [reload]);
+
+  useEffect(() => {
+    setScheduleEditing(false);
+    setPendingDateReadback(undefined);
+    setScheduleError("");
+    setScheduleSuccess(false);
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -147,6 +163,92 @@ export default function CampaignDebtPage() {
       .finally(() => { if (active) setSummaryLoading(false); });
     return () => { active = false; };
   }, [id, summaryRetry]);
+
+  useEffect(() => {
+    if (summary && !scheduleEditing && pendingDateReadback === undefined) {
+      setPaymentStartDraft(summary.payment_start_at ?? "");
+    }
+  }, [summary, scheduleEditing, pendingDateReadback]);
+
+  async function confirmScheduleReadback(expected: string | null) {
+    if (!id) return;
+    const [summaryResponse, debtResponse] = await Promise.all([
+      getDebtSummary(Number(id)), getDebt(Number(id)),
+    ]);
+    const currentSummary = parseDebtSummary(summaryResponse?.data);
+    const currentDebt = debtResponse?.data as DebtDetail | undefined;
+    if (!currentSummary || !currentDebt ||
+        currentSummary.payment_start_at !== expected || currentDebt.paymentStartAt !== expected) {
+      throw new Error("A data enviada não foi confirmada pelas leituras da dívida e do cronograma.");
+    }
+    setSummary(currentSummary);
+    setDebt(currentDebt);
+    setPaymentStartDraft(expected ?? "");
+    setPendingDateReadback(undefined);
+    setScheduleEditing(false);
+    setScheduleSuccess(true);
+    setScheduleError("");
+  }
+
+  async function saveScheduleDate() {
+    if (!id || !debt || !summary || debt.opportunity.status !== "review" ||
+        scheduleSavingRef.current || pendingDateReadback !== undefined) return;
+    const nextDate = paymentStartDraft.trim() || null;
+    if (nextDate && !isIsoDate(nextDate)) {
+      setScheduleError("Informe uma data válida no formato AAAA-MM-DD.");
+      return;
+    }
+    if (nextDate === summary.payment_start_at) {
+      setScheduleEditing(false);
+      setScheduleError("");
+      return;
+    }
+
+    scheduleSavingRef.current = true;
+    setScheduleSaving(true);
+    setScheduleError("");
+    setScheduleSuccess(false);
+    let patchSent = false;
+    try {
+      const [beforeSummaryResponse, beforeDebtResponse] = await Promise.all([
+        getDebtSummary(Number(id)), getDebt(Number(id)),
+      ]);
+      const beforeSummary = parseDebtSummary(beforeSummaryResponse?.data);
+      const beforeDebt = beforeDebtResponse?.data as DebtDetail | undefined;
+      if (!beforeSummary || !beforeDebt || beforeDebt.opportunity.status !== "review" ||
+          beforeSummary.payment_start_at !== summary.payment_start_at ||
+          beforeDebt.paymentStartAt !== summary.payment_start_at) {
+        setScheduleError("A data ou o status mudou no servidor. Recarregue a página antes de editar.");
+        return;
+      }
+      await updateDebtSchedule(Number(id), { payment_start_at: nextDate });
+      patchSent = true;
+      setPendingDateReadback(nextDate);
+      await confirmScheduleReadback(nextDate);
+    } catch (error) {
+      setScheduleError(patchSent
+        ? `A alteração foi enviada, mas ainda não confirmada. ${debtActionError(error, "Tente consultar novamente sem reenviar.")}`
+        : debtActionError(error, "Não foi possível salvar a data."));
+    } finally {
+      scheduleSavingRef.current = false;
+      setScheduleSaving(false);
+    }
+  }
+
+  async function retryScheduleReadback() {
+    if (pendingDateReadback === undefined || scheduleSavingRef.current) return;
+    scheduleSavingRef.current = true;
+    setScheduleSaving(true);
+    setScheduleError("");
+    try {
+      await confirmScheduleReadback(pendingDateReadback);
+    } catch (error) {
+      setScheduleError(debtActionError(error, "Ainda não foi possível confirmar a data."));
+    } finally {
+      scheduleSavingRef.current = false;
+      setScheduleSaving(false);
+    }
+  }
 
   const handleGenerateCharge = async () => {
     if (!id) return;
@@ -460,6 +562,52 @@ export default function CampaignDebtPage() {
           </>
         )}
       </Card>
+
+      {summary && (
+        <Card className="p-5 border-border/60 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-semibold text-foreground">Início configurado dos pagamentos</h3>
+              <p className="text-sm text-muted-foreground">{summary.payment_start_at ? formatDebtSummaryDate(summary.payment_start_at) : "Não configurado — a API determina a base do cronograma."}</p>
+            </div>
+            {debt.opportunity.status === "review" && !scheduleEditing && pendingDateReadback === undefined && (
+              <Button variant="outline" onClick={() => {
+                setPaymentStartDraft(summary.payment_start_at ?? "");
+                setScheduleError("");
+                setScheduleSuccess(false);
+                setScheduleEditing(true);
+              }}>Editar data</Button>
+            )}
+          </div>
+          {debt.opportunity.status !== "review" && <p className="text-xs text-muted-foreground">A data é somente leitura fora da etapa de análise.</p>}
+          {scheduleEditing && pendingDateReadback === undefined && (
+            <div className="space-y-3">
+              <label htmlFor="debt-payment-start" className="block text-sm font-medium">Data de início (opcional)</label>
+              <input id="debt-payment-start" type="date" value={paymentStartDraft}
+                onChange={(event) => setPaymentStartDraft(event.target.value)}
+                className="flex h-10 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <Button disabled={scheduleSaving} onClick={saveScheduleDate}>{scheduleSaving ? "Salvando..." : "Salvar data"}</Button>
+                <Button variant="outline" disabled={scheduleSaving} onClick={() => {
+                  setScheduleEditing(false);
+                  setPaymentStartDraft(summary.payment_start_at ?? "");
+                  setScheduleError("");
+                }}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+          {pendingDateReadback !== undefined && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">O PATCH foi enviado; confirme a leitura sem enviar novamente.</p>
+              <Button variant="outline" disabled={scheduleSaving} onClick={retryScheduleReadback}>
+                {scheduleSaving ? "Consultando..." : "Tentar confirmar leitura"}
+              </Button>
+            </div>
+          )}
+          {scheduleError && <p role="alert" className="text-sm text-destructive">{scheduleError}</p>}
+          {scheduleSuccess && <p role="status" className="text-sm text-success">Data salva e confirmada na dívida e no cronograma.</p>}
+        </Card>
+      )}
 
       {/* Generated installments, never inferred from the projection. */}
       <Card className="border-border/60 overflow-hidden">

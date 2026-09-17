@@ -72,6 +72,7 @@ import {
   readCompanyInformation,
   type CompanyInformation,
 } from "@/features/company-information/company-information";
+import { formatDebtSummaryDate, isIsoDate } from "@/features/campaign-debt/debt-summary";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -95,6 +96,7 @@ import {
 } from "@/utils/upload-validation";
 import {
   createOpportunity,
+  getOpportunity,
   getBanks,
   getAddress,
   getBankingInformation,
@@ -159,6 +161,7 @@ type CampaignDraft = {
   profitability: string;
   installments: string;
   paymentFrequency: string;
+  paymentStartAt: string;
   equityPercentage: string;
   targetAmount: string;
   shareValue: string;
@@ -205,6 +208,7 @@ const INITIAL_DRAFT: CampaignDraft = {
   profitability: "",
   installments: "",
   paymentFrequency: "",
+  paymentStartAt: "",
   equityPercentage: "",
   targetAmount: "",
   shareValue: "",
@@ -354,6 +358,11 @@ const SUBMIT_ERROR_FIELD_META: Record<
     label: "Frequência de pagamento",
     step: "financial",
     focusId: "paymentFrequency",
+  },
+  "debt.payment_start_at": {
+    label: "Início dos pagamentos",
+    step: "financial",
+    focusId: "paymentStartAt",
   },
   resource_utilization: {
     label: "Uso dos recursos",
@@ -606,7 +615,8 @@ function getDraftValidation(
     draft.modality === "debt" &&
     toPositiveDecimal(draft.profitability) > 0 &&
     Number.parseInt(draft.installments, 10) > 0 &&
-    fieldHasText(draft.paymentFrequency);
+    fieldHasText(draft.paymentFrequency) &&
+    (!draft.paymentStartAt || isIsoDate(draft.paymentStartAt));
 
   const equityValid =
     draft.modality === "equity" &&
@@ -1454,6 +1464,16 @@ function FinancialStep({
                 </SelectContent>
               </Select>
             </FormField>
+
+            <FormField id="paymentStartAt" label="Início dos pagamentos (opcional)" hint="Se não informado, a API define a base do cronograma; consulte a prévia após a criação.">
+              <Input
+                id="paymentStartAt"
+                type="date"
+                value={draft.paymentStartAt}
+                onChange={(event) => onPatch({ paymentStartAt: event.target.value })}
+              />
+              {draft.paymentStartAt && <FieldHint valid={isIsoDate(draft.paymentStartAt)} message={isIsoDate(draft.paymentStartAt) ? "Data válida." : "Informe uma data válida."} />}
+            </FormField>
           </div>
         )}
 
@@ -2276,6 +2296,7 @@ function ReviewStep({
   onSubmit,
   submitting,
   createdOpportunityId,
+  createdReadbackError,
   submitError,
   onSelectSubmitError,
 }: {
@@ -2288,6 +2309,7 @@ function ReviewStep({
   onSubmit: () => void;
   submitting: boolean;
   createdOpportunityId: number | null;
+  createdReadbackError: string | null;
   submitError: SubmitErrorState;
   onSelectSubmitError: (item: SubmitErrorItem) => void;
 }) {
@@ -2335,6 +2357,14 @@ function ReviewStep({
           </Alert>
         )}
 
+        {createdOpportunityId && createdReadbackError && (
+          <Alert variant="destructive">
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle>Leitura da data ainda não confirmada</AlertTitle>
+            <AlertDescription>{createdReadbackError} A oportunidade {createdOpportunityId} já foi criada; não envie novamente.</AlertDescription>
+          </Alert>
+        )}
+
         <SubmitErrorAlert submitError={submitError} onSelectItem={onSelectSubmitError} />
 
         <CampaignPublishedPreview
@@ -2368,12 +2398,15 @@ function ReviewStep({
             />
             <SummaryItem label="Cotas visuais" value={quotaCount.toLocaleString("pt-BR")} />
             {draft.modality === "debt" && (
-              <SummaryItem
-                label="Dívida"
-                value={`${draft.profitability || "-"}% | ${draft.installments || "-"} parcelas | ${
-                  draft.paymentFrequency || "-"
-                }`}
-              />
+              <>
+                <SummaryItem
+                  label="Dívida"
+                  value={`${draft.profitability || "-"}% | ${draft.installments || "-"} parcelas | ${
+                    draft.paymentFrequency || "-"
+                  }`}
+                />
+                <SummaryItem label="Início dos pagamentos" value={draft.paymentStartAt ? formatDebtSummaryDate(draft.paymentStartAt) : "Não configurado"} />
+              </>
             )}
             {draft.modality === "equity" && (
               <SummaryItem label="Participação" value={`${draft.equityPercentage || "-"}%`} />
@@ -2605,6 +2638,7 @@ export default function CampaignCreatePage() {
   const profilePrefillRef = useRef<OpportunityProfilePrefill>({});
   const [submitting, setSubmitting] = useState(false);
   const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
+  const [createdReadbackError, setCreatedReadbackError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<SubmitErrorState>(null);
   const validation = useMemo(
     () => getDraftValidation(draft, segments, banks, countries, companyInformation?.cnpj ?? ""),
@@ -2804,6 +2838,7 @@ export default function CampaignCreatePage() {
 
     setSubmitting(true);
     setSubmitError(null);
+    setCreatedReadbackError(null);
 
     try {
       const latestCompany = readCompanyInformation(await getCompanyInformation());
@@ -2847,6 +2882,7 @@ export default function CampaignCreatePage() {
                 percentage_profitability: toPositiveDecimal(draft.profitability),
                 payment_frequency: draft.paymentFrequency,
                 grace_period: 0,
+                payment_start_at: draft.paymentStartAt || null,
                 total_installments: toInteger(draft.installments),
                 single_installment: draft.paymentFrequency === "unica",
               },
@@ -2882,6 +2918,17 @@ export default function CampaignCreatePage() {
 
       if (Number.isFinite(id) && id > 0) {
         setCreatedOpportunityId(id);
+        if (draft.modality === "debt") {
+          try {
+            const readback = await getOpportunity(id);
+            const returnedDate = readback?.data?.debt?.payment_start_at ?? null;
+            if (readback?.data?.id !== id || returnedDate !== (draft.paymentStartAt || null)) {
+              setCreatedReadbackError("A API não confirmou a data-base solicitada na leitura da oportunidade.");
+            }
+          } catch {
+            setCreatedReadbackError("A criação foi retornada, mas a leitura da oportunidade falhou.");
+          }
+        }
       }
 
       toast.success("Oportunidade criada com sucesso.");
@@ -3102,6 +3149,7 @@ export default function CampaignCreatePage() {
               onSubmit={handleSubmit}
               submitting={submitting}
               createdOpportunityId={createdOpportunityId}
+              createdReadbackError={createdReadbackError}
               submitError={submitError}
               onSelectSubmitError={handleSubmitErrorItem}
             />
