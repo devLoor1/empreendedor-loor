@@ -68,6 +68,7 @@ import {
   mergeOpportunityProfilePrefill,
   type OpportunityProfilePrefill,
 } from "@/features/campaign-creation/opportunity-profile-prefill";
+import { opportunityBankingReadbackMatches } from "@/features/campaign-creation/opportunity-banking-readback";
 import {
   readCompanyInformation,
   type CompanyInformation,
@@ -2918,16 +2919,17 @@ export default function CampaignCreatePage() {
 
       if (Number.isFinite(id) && id > 0) {
         setCreatedOpportunityId(id);
-        if (draft.modality === "debt") {
-          try {
-            const readback = await getOpportunity(id);
-            const returnedDate = readback?.data?.debt?.payment_start_at ?? null;
-            if (readback?.data?.id !== id || returnedDate !== (draft.paymentStartAt || null)) {
-              setCreatedReadbackError("A API não confirmou a data-base solicitada na leitura da oportunidade.");
-            }
-          } catch {
-            setCreatedReadbackError("A criação foi retornada, mas a leitura da oportunidade falhou.");
+        try {
+          const readback = await getOpportunity(id);
+          if (readback?.data?.id !== id ||
+              !opportunityBankingReadbackMatches(payload, readback?.data)) {
+            setCreatedReadbackError("A API não confirmou os dados bancários e Pix salvos nesta oportunidade.");
+          } else if (draft.modality === "debt" &&
+                     (readback?.data?.debt?.payment_start_at ?? null) !== (draft.paymentStartAt || null)) {
+            setCreatedReadbackError("A API não confirmou a data-base solicitada na leitura da oportunidade.");
           }
+        } catch {
+          setCreatedReadbackError("A criação foi retornada, mas a leitura da oportunidade falhou.");
         }
       }
 

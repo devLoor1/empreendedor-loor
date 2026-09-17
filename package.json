@@ -11,6 +11,7 @@
     "test:financial-data": "node --experimental-strip-types src/features/campaign-creation/financial-data.assertions.ts",
     "test:opportunity-form": "node --experimental-strip-types src/features/campaign-creation/opportunity-form-contract.assertions.ts",
     "test:opportunity-prefill": "node --experimental-strip-types src/features/campaign-creation/opportunity-profile-prefill.assertions.ts",
+    "test:opportunity-banking": "node --experimental-strip-types src/features/campaign-creation/opportunity-banking-readback.assertions.ts",
     "test:opportunity-documents": "node --experimental-strip-types src/features/campaign-documents/opportunity-documents.assertions.ts",
     "test:opportunity-lifecycle": "node --experimental-strip-types src/features/campaign-creation/opportunity-lifecycle.assertions.ts",
     "test:company-information": "node --experimental-strip-types src/features/company-information/company-information.assertions.ts",
