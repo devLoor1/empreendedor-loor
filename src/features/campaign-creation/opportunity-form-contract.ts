@@ -25,13 +25,12 @@ type OpportunityContentDraft = {
   videoUrl: string;
 };
 
-export function buildOpportunityContentPayload(draft: OpportunityContentDraft, imageId: number, canonicalCompanyCnpj: string) {
+export function buildOpportunityContentPayload(draft: OpportunityContentDraft, imageId: number) {
   return {
     image_id: imageId,
     segment_id: Number(draft.segment),
     about: draft.about.trim(),
     business_name: draft.businessName.trim(),
-    company_cnpj: onlyDigits(canonicalCompanyCnpj),
     cpf: onlyDigits(draft.responsibleCpf),
     promotional_video_url: draft.videoUrl.trim() || null,
     description: draft.shortDescription.trim(),

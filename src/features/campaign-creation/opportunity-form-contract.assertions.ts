@@ -26,7 +26,6 @@ const content = buildOpportunityContentPayload(
     videoUrl: "  ",
   },
   73,
-  "12.345.678/0001-90",
 );
 
 assert.deepEqual(content, {
@@ -34,7 +33,6 @@ assert.deepEqual(content, {
   segment_id: 42,
   about: "Sobre a oferta",
   business_name: "Empresa QA",
-  company_cnpj: "12345678000190",
   cpf: "12345678909",
   promotional_video_url: null,
   description: "Resumo da oferta",
@@ -43,6 +41,10 @@ assert.deepEqual(content, {
   spe_cnpj: "98765432000110",
 });
 count += 1;
+check(
+  !Object.hasOwn(content, "company_cnpj"),
+  "create omite CNPJ redundante e deixa o Backend derivar da Company canônica",
+);
 
 check(OPPORTUNITY_IMAGE_MAX_SIZE_BYTES === 20 * 1024 * 1024, "limite de imagem é 20 MiB");
 const exactLimit = new File([new Uint8Array(OPPORTUNITY_IMAGE_MAX_SIZE_BYTES)], "banner.PNG");
@@ -60,11 +62,27 @@ check(
 
 const source = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
 check(
-  source.includes("opportunity: buildOpportunityContentPayload(draft, imageId, latestCompany.cnpj)"),
-  "create usa o CNPJ canônico lido da API no serializer testado",
+  source.includes("opportunity: buildOpportunityContentPayload(draft, imageId)"),
+  "create não passa o CNPJ canônico como confirmação redundante ao serializer",
 );
-check(!source.includes("onPatch({ documentNumber:"), "CNPJ da Opportunity não tem entrada independente");
-check(source.includes("readCompanyInformation(await getCompanyInformation())"), "create reconcilia a Company antes de upload/submit");
+check(
+  !source.includes("onPatch({ documentNumber:"),
+  "CNPJ da Opportunity não tem entrada independente",
+);
+check(
+  source.includes("readCompanyInformation(await getCompanyInformation())"),
+  "create reconcilia a Company antes de upload/submit",
+);
+check(
+  source.includes(
+    "!latestCompany || !companyInformation || latestCompany.cnpj !== companyInformation.cnpj",
+  ),
+  "mudança da Company impede submit",
+);
+check(
+  source.includes("onlyDigits(readback?.data?.company_cnpj) !== onlyDigits(latestCompany.cnpj)"),
+  "readback confirma que o Backend derivou o CNPJ da Company",
+);
 check(
   source.includes("members: []"),
   "sem equipe coletada, envia array vazio aceito pelo contrato",
@@ -83,10 +101,13 @@ for (const discarded of [
 check(source.includes("20 MiB cada"), "copy das imagens extras corresponde ao validator");
 check(source.includes("até 20 MiB"), "copy da imagem principal corresponde ao validator");
 check(
-  source.includes("endereço e CNPJ canônico salvo no Perfil da empresa"),
+  /endereço e CNPJ canônico salvo no\s+Perfil da\s+empresa/.test(source),
   "pré-requisitos da campanha incluem o CNPJ canônico",
 );
-const readinessSource = readFileSync(new URL("../../hooks/use-campaign-readiness.ts", import.meta.url), "utf8");
+const readinessSource = readFileSync(
+  new URL("../../hooks/use-campaign-readiness.ts", import.meta.url),
+  "utf8",
+);
 check(
   !readinessSource.includes("até existir contrato canônico de empresa"),
   "readiness não anuncia contrato canônico inexistente",
