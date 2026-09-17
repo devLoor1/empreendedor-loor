@@ -2946,8 +2946,7 @@ export default function CampaignCreatePage() {
               Pré-requisitos
             </CardTitle>
             <CardDescription>
-              A criação real permanece bloqueada apenas quando houver pendências de perfil pessoal
-              ou endereço da empresa.
+              A criação real requer perfil pessoal, endereço e CNPJ canônico salvo no Perfil da empresa.
             </CardDescription>
           </div>
           {!canStart && !previewWizard && (
