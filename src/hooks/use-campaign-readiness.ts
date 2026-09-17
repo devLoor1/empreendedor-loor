@@ -93,9 +93,9 @@ function buildItems(
       id: "company-contract",
       title: "CNPJ e status da empresa",
       description:
-        "O CNPJ e o status operacional aparecem como pendentes de validação até existir contrato canônico de empresa, mas não bloqueiam a criação neste ciclo.",
+        "A criação exige um CNPJ canônico salvo no Perfil da empresa. O status de validação é exibido lá, mas não bloqueia este fluxo.",
       href: "/app/perfil-empresa",
-      action: "Revisar aviso",
+      action: "Revisar empresa",
       status: "attention",
       icon: AlertCircle,
     },

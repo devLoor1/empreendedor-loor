@@ -82,5 +82,14 @@ for (const discarded of [
 }
 check(source.includes("20 MiB cada"), "copy das imagens extras corresponde ao validator");
 check(source.includes("até 20 MiB"), "copy da imagem principal corresponde ao validator");
+check(
+  source.includes("endereço e CNPJ canônico salvo no Perfil da empresa"),
+  "pré-requisitos da campanha incluem o CNPJ canônico",
+);
+const readinessSource = readFileSync(new URL("../../hooks/use-campaign-readiness.ts", import.meta.url), "utf8");
+check(
+  !readinessSource.includes("até existir contrato canônico de empresa"),
+  "readiness não anuncia contrato canônico inexistente",
+);
 
 console.log(`opportunity-form-contract: ${count} assertions passed`);
