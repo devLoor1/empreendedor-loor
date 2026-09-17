@@ -18,7 +18,6 @@ type OpportunityContentDraft = {
   businessName: string;
   about: string;
   shortDescription: string;
-  documentNumber: string;
   responsibleCpf: string;
   speCnpj: string;
   segment: string;
@@ -26,13 +25,13 @@ type OpportunityContentDraft = {
   videoUrl: string;
 };
 
-export function buildOpportunityContentPayload(draft: OpportunityContentDraft, imageId: number) {
+export function buildOpportunityContentPayload(draft: OpportunityContentDraft, imageId: number, canonicalCompanyCnpj: string) {
   return {
     image_id: imageId,
     segment_id: Number(draft.segment),
     about: draft.about.trim(),
     business_name: draft.businessName.trim(),
-    company_cnpj: onlyDigits(draft.documentNumber),
+    company_cnpj: onlyDigits(canonicalCompanyCnpj),
     cpf: onlyDigits(draft.responsibleCpf),
     promotional_video_url: draft.videoUrl.trim() || null,
     description: draft.shortDescription.trim(),

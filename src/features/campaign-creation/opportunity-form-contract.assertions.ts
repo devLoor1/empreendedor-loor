@@ -19,7 +19,6 @@ const content = buildOpportunityContentPayload(
     businessName: "  Empresa QA  ",
     about: "  Sobre a oferta  ",
     shortDescription: "  Resumo da oferta  ",
-    documentNumber: "12.345.678/0001-90",
     responsibleCpf: "123.456.789-09",
     speCnpj: "98.765.432/0001-10",
     segment: "42",
@@ -27,6 +26,7 @@ const content = buildOpportunityContentPayload(
     videoUrl: "  ",
   },
   73,
+  "12.345.678/0001-90",
 );
 
 assert.deepEqual(content, {
@@ -60,9 +60,11 @@ check(
 
 const source = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
 check(
-  source.includes("opportunity: buildOpportunityContentPayload(draft, imageId)"),
-  "create usa serializer testado",
+  source.includes("opportunity: buildOpportunityContentPayload(draft, imageId, latestCompany.cnpj)"),
+  "create usa o CNPJ canônico lido da API no serializer testado",
 );
+check(!source.includes("onPatch({ documentNumber:"), "CNPJ da Opportunity não tem entrada independente");
+check(source.includes("readCompanyInformation(await getCompanyInformation())"), "create reconcilia a Company antes de upload/submit");
 check(
   source.includes("members: []"),
   "sem equipe coletada, envia array vazio aceito pelo contrato",
