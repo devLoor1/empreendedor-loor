@@ -344,6 +344,28 @@ export async function getOpportunityDocuments(id: number) {
   return apiFetch(`/entrepreneurs/opportunities/${id}/documents`);
 }
 
+export async function uploadOpportunityDocument(opportunityId: number, formData: FormData) {
+  return apiFormData(`/entrepreneurs/opportunities/${opportunityId}/documents`, 'POST', formData);
+}
+
+export async function replaceOpportunityDocument(
+  opportunityId: number,
+  documentId: number,
+  formData: FormData,
+) {
+  return apiFormData(
+    `/entrepreneurs/opportunities/${opportunityId}/documents/${documentId}`,
+    'PUT',
+    formData,
+  );
+}
+
+export async function deleteOpportunityDocument(opportunityId: number, documentId: number) {
+  return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/documents/${documentId}`, {
+    method: 'DELETE',
+  });
+}
+
 export async function downloadOpportunityInvestmentContract(opportunityId: number, documentId: number) {
   const token = getToken();
   const slug = import.meta.env.VITE_API_SLUG;

@@ -1,11 +1,23 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef, type FormEvent } from "react";
 import {
   ArrowLeft, Users, Calendar, TrendingUp, Building2, Shield, ExternalLink,
   Play, PieChart, Banknote, Clock, CheckCircle2, AlertCircle, CircleDollarSign,
   Percent, Timer, CreditCard, FileText, Share2, MessageCircle, Download,
+  Loader2, Pencil, Plus, RefreshCw, Trash2, Upload,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,19 +28,40 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  deleteOpportunityDocument,
   downloadOpportunityInvestmentContract,
   getOpportunity,
   getOpportunityDocuments,
   getOpportunityInvestors,
+  replaceOpportunityDocument,
   updateOpportunity,
+  uploadOpportunityDocument,
 } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import { normalizeUploadFilename } from "@/utils/upload-validation";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
 import {
+  canCreateOpportunityDocument,
+  canDeleteOpportunityDocument,
+  canReplaceOpportunityDocument,
+  OPPORTUNITY_DOCUMENT_WRITE_TYPES,
   opportunityDocumentTypeLabel,
+  opportunityDocumentReadbackMatches,
+  parseCreatedOpportunityDocumentId,
   parseOpportunityDocuments,
   safeOpportunityDocumentUrl,
+  validateOpportunityDocumentFile,
+  validateOpportunityDocumentName,
   type OpportunityDocument,
+  type OpportunityDocumentReadback,
+  type OpportunityDocumentWriteType,
 } from "@/features/campaign-documents/opportunity-documents";
 import {
   buildOwnerContentPatch,
@@ -273,7 +306,7 @@ export default function CampaignDetail() {
         </TabsContent>
 
         <TabsContent value="documents" className="mt-4">
-          <OpportunityDocumentsTab opportunityId={opp.id} />
+          <OpportunityDocumentsTab opportunityId={opp.id} opportunityStatus={opp.status} />
         </TabsContent>
 
         {opp.debt && (
@@ -465,13 +498,58 @@ function OpportunityContentEditor({
   );
 }
 
-function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
+function opportunityDocumentErrorMessage(error: unknown) {
+  if (error && typeof error === "object") {
+    const status = (error as { status?: unknown }).status;
+    const message = (error as { message?: unknown }).message;
+    const errors = (error as { errors?: Array<{ message?: unknown }> }).errors;
+    const firstValidationMessage = errors?.find((item) => typeof item.message === "string")?.message;
+
+    if (typeof firstValidationMessage === "string" && firstValidationMessage.trim()) {
+      return firstValidationMessage;
+    }
+    if (status === 404) return "Documento ou oportunidade indisponível para esta conta.";
+    if (status === 401) return "Sua sessão expirou. Entre novamente para continuar.";
+    if (typeof message === "string" && message.trim()) return message;
+    if (status === 422) return "A operação não é permitida no estado atual da oportunidade.";
+  }
+
+  return "Não foi possível concluir a operação. Tente novamente.";
+}
+
+function OpportunityDocumentsTab({
+  opportunityId,
+  opportunityStatus,
+}: {
+  opportunityId: number;
+  opportunityStatus: string;
+}) {
   const [documents, setDocuments] = useState<OpportunityDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [downloadError, setDownloadError] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createType, setCreateType] = useState<OpportunityDocumentWriteType>("other_documents");
+  const [createFile, setCreateFile] = useState<File | null>(null);
+  const [createFileKey, setCreateFileKey] = useState(0);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [replaceName, setReplaceName] = useState("");
+  const [replaceFile, setReplaceFile] = useState<File | null>(null);
+  const [replaceFileKey, setReplaceFileKey] = useState(0);
+  const [deleteTarget, setDeleteTarget] = useState<OpportunityDocument | null>(null);
+  const [mutationKey, setMutationKey] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [pendingReadback, setPendingReadback] = useState<OpportunityDocumentReadback | null>(null);
+  const mutationLock = useRef(false);
+
+  const loadDocuments = useCallback(async () => {
+    const response = await getOpportunityDocuments(opportunityId);
+    const nextDocuments = parseOpportunityDocuments(response);
+    setDocuments(nextDocuments);
+    return nextDocuments;
+  }, [opportunityId]);
 
   useEffect(() => {
     let active = true;
@@ -485,6 +563,53 @@ function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [opportunityId, retry]);
+
+  const confirmReadback = async (expectation: OpportunityDocumentReadback) => {
+    setPendingReadback(expectation);
+    try {
+      const nextDocuments = await loadDocuments();
+      if (!opportunityDocumentReadbackMatches(expectation, nextDocuments)) {
+        throw new Error("A alteração foi aceita, mas ainda não apareceu na leitura do servidor.");
+      }
+      setPendingReadback(null);
+      setMutationError(null);
+      return true;
+    } catch (readbackError) {
+      const message = readbackError instanceof Error && readbackError.message
+        ? readbackError.message
+        : opportunityDocumentErrorMessage(readbackError);
+      setMutationError(`${message} Atualize o estado sem reenviar a alteração.`);
+      return false;
+    }
+  };
+
+  const resetConfirmedMutationForm = (expectation: OpportunityDocumentReadback) => {
+    if (expectation.kind === "create" || expectation.kind === "create_without_id") {
+      setCreateName("");
+      setCreateType("other_documents");
+      setCreateFile(null);
+      setCreateFileKey((value) => value + 1);
+    }
+    if (expectation.kind === "replace") {
+      setEditingId(null);
+      setReplaceFile(null);
+    }
+  };
+
+  const retryPendingReadback = async () => {
+    if (!pendingReadback || mutationLock.current) return;
+    const expectation = pendingReadback;
+    mutationLock.current = true;
+    setMutationKey("readback");
+    setMutationError(null);
+    const confirmed = await confirmReadback(expectation);
+    if (confirmed) {
+      resetConfirmedMutationForm(expectation);
+      toast.success("Estado do documento confirmado pelo servidor.");
+    }
+    mutationLock.current = false;
+    setMutationKey(null);
+  };
 
   const downloadContract = async (document: OpportunityDocument) => {
     setDownloadingId(document.id);
@@ -507,17 +632,222 @@ function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
     }
   };
 
+  const submitCreate = async (event: FormEvent) => {
+    event.preventDefault();
+    if (mutationLock.current || pendingReadback) return;
+
+    const nameError = validateOpportunityDocumentName(createName);
+    const fileError = validateOpportunityDocumentFile(createFile);
+    if (nameError || fileError) {
+      setMutationError(nameError ?? fileError);
+      return;
+    }
+    if (!canCreateOpportunityDocument(opportunityStatus, createType, documents)) {
+      setMutationError("Este tipo de documento não pode ser adicionado no estado atual da oportunidade.");
+      return;
+    }
+
+    mutationLock.current = true;
+    setMutationKey("create");
+    setMutationError(null);
+    try {
+      const previousIds = documents.map((document) => document.id);
+      const formData = new FormData();
+      formData.append("name", createName.trim());
+      formData.append("type", createType);
+      formData.append("file", normalizeUploadFilename(createFile as File));
+      const response = await uploadOpportunityDocument(opportunityId, formData);
+      const id = parseCreatedOpportunityDocumentId(response);
+      const expectation: OpportunityDocumentReadback = id
+        ? { kind: "create", id, name: createName.trim(), type: createType }
+        : { kind: "create_without_id", previousIds, name: createName.trim(), type: createType };
+      const confirmed = await confirmReadback(expectation);
+      if (confirmed) {
+        resetConfirmedMutationForm(expectation);
+        toast.success("Documento enviado e confirmado.");
+      }
+    } catch (createError) {
+      setMutationError(opportunityDocumentErrorMessage(createError));
+    } finally {
+      mutationLock.current = false;
+      setMutationKey(null);
+    }
+  };
+
+  const beginReplace = (document: OpportunityDocument) => {
+    setEditingId(document.id);
+    setReplaceName(document.name);
+    setReplaceFile(null);
+    setReplaceFileKey((value) => value + 1);
+    setMutationError(null);
+  };
+
+  const submitReplace = async (event: FormEvent, document: OpportunityDocument) => {
+    event.preventDefault();
+    if (mutationLock.current || pendingReadback) return;
+
+    const nameError = validateOpportunityDocumentName(replaceName);
+    const fileError = validateOpportunityDocumentFile(replaceFile);
+    if (nameError || fileError) {
+      setMutationError(nameError ?? fileError);
+      return;
+    }
+    if (!canReplaceOpportunityDocument(opportunityStatus, document)) {
+      setMutationError("Este documento não pode ser substituído no estado atual da oportunidade.");
+      return;
+    }
+
+    mutationLock.current = true;
+    setMutationKey(`replace-${document.id}`);
+    setMutationError(null);
+    try {
+      const formData = new FormData();
+      formData.append("name", replaceName.trim());
+      formData.append("file", normalizeUploadFilename(replaceFile as File));
+      await replaceOpportunityDocument(opportunityId, document.id, formData);
+      const expectation: OpportunityDocumentReadback = {
+        kind: "replace",
+        previousId: document.id,
+        previousIds: documents.map((item) => item.id),
+        name: replaceName.trim(),
+        type: document.type,
+      };
+      const confirmed = await confirmReadback(expectation);
+      if (confirmed) {
+        resetConfirmedMutationForm(expectation);
+        toast.success("Documento substituído e confirmado.");
+      }
+    } catch (replaceError) {
+      setMutationError(opportunityDocumentErrorMessage(replaceError));
+    } finally {
+      mutationLock.current = false;
+      setMutationKey(null);
+    }
+  };
+
+  const submitDelete = async () => {
+    const document = deleteTarget;
+    if (!document || mutationLock.current || pendingReadback) return;
+    if (!canDeleteOpportunityDocument(opportunityStatus, document)) {
+      setMutationError("Este documento não pode ser excluído no estado atual da oportunidade.");
+      setDeleteTarget(null);
+      return;
+    }
+
+    mutationLock.current = true;
+    setMutationKey(`delete-${document.id}`);
+    setMutationError(null);
+    try {
+      await deleteOpportunityDocument(opportunityId, document.id);
+      setDeleteTarget(null);
+      const confirmed = await confirmReadback({ kind: "delete", id: document.id });
+      if (confirmed) toast.success("Documento excluído e estado confirmado.");
+    } catch (deleteError) {
+      setDeleteTarget(null);
+      setMutationError(opportunityDocumentErrorMessage(deleteError));
+    } finally {
+      mutationLock.current = false;
+      setMutationKey(null);
+    }
+  };
+
+  const isReadOnly = opportunityStatus === "archived" || opportunityStatus === "finished";
+  const createTypes = OPPORTUNITY_DOCUMENT_WRITE_TYPES.filter((type) =>
+    canCreateOpportunityDocument(opportunityStatus, type, documents),
+  );
+  const mutationsDisabled = Boolean(mutationKey || pendingReadback || loading || error);
+
   return (
-    <Card className="p-5 border-border/60 space-y-4">
+    <Card className="p-5 border-border/60 space-y-5">
       <div>
         <h3 className="font-semibold text-foreground">Documentos da oportunidade</h3>
         <p className="text-sm text-muted-foreground">
-          Arquivos associados a esta oportunidade. O envio e a substituição pelo Empreendedor ainda não estão disponíveis.
+          Gerencie apenas os arquivos desta oportunidade. Os documentos cadastrais da empresa permanecem separados no perfil.
         </p>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Esta oportunidade está {opportunityStatus === "archived" ? "arquivada" : "concluída"}. Os documentos estão disponíveis somente para leitura.
+        </div>
+      )}
+
+      {pendingReadback && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" aria-live="polite">
+          <p className="font-medium">Alteração enviada; confirmação de leitura pendente.</p>
+          <p className="mt-1">Não reenvie a operação. Consulte novamente apenas o estado atual do servidor.</p>
+          <Button
+            className="mt-3"
+            size="sm"
+            variant="outline"
+            disabled={mutationKey === "readback"}
+            onClick={() => void retryPendingReadback()}
+          >
+            {mutationKey === "readback" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Atualizar estado
+          </Button>
+        </div>
+      )}
+
+      {mutationError && <p className="text-sm text-destructive" role="alert">{mutationError}</p>}
+
+      {!isReadOnly && (
+        <form className="rounded-lg border p-4 space-y-4" onSubmit={(event) => void submitCreate(event)}>
+          <div className="flex items-center gap-2">
+            <Plus className="h-4 w-4 text-primary" />
+            <h4 className="font-medium text-sm">Adicionar documento da oportunidade</h4>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={`opportunity-document-name-${opportunityId}`}>Nome do documento</Label>
+              <Input
+                id={`opportunity-document-name-${opportunityId}`}
+                maxLength={128}
+                value={createName}
+                disabled={mutationsDisabled}
+                onChange={(event) => setCreateName(event.target.value)}
+                placeholder="Ex.: Demonstrações financeiras 2026"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select
+                value={createType}
+                disabled={mutationsDisabled}
+                onValueChange={(value) => setCreateType(value as OpportunityDocumentWriteType)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {createTypes.map((type) => (
+                    <SelectItem key={type} value={type}>{opportunityDocumentTypeLabel(type)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Tipos únicos já enviados não podem ser duplicados; “Outros documentos” é repetível.</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`opportunity-document-file-${opportunityId}`}>Arquivo PDF</Label>
+            <Input
+              key={createFileKey}
+              id={`opportunity-document-file-${opportunityId}`}
+              type="file"
+              accept="application/pdf,.pdf"
+              disabled={mutationsDisabled}
+              onChange={(event) => setCreateFile(event.target.files?.[0] ?? null)}
+            />
+            <p className="text-xs text-muted-foreground">PDF de até 20 MiB.</p>
+          </div>
+          <Button type="submit" size="sm" disabled={mutationsDisabled}>
+            {mutationKey === "create" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            {mutationKey === "create" ? "Enviando..." : "Enviar documento"}
+          </Button>
+        </form>
+      )}
+
       {loading && <p className="text-sm text-muted-foreground">Carregando documentos...</p>}
       {error && (
-        <div className="flex items-center gap-3 text-sm text-destructive">
+        <div className="flex flex-wrap items-center gap-3 text-sm text-destructive">
           Não foi possível carregar os documentos.
           <Button size="sm" variant="outline" onClick={() => setRetry((value) => value + 1)}>Tentar novamente</Button>
         </div>
@@ -530,26 +860,116 @@ function OpportunityDocumentsTab({ opportunityId }: { opportunityId: number }) {
         <ul className="space-y-3">
           {documents.map((document) => {
             const link = safeOpportunityDocumentUrl(document.download_link);
+            const canReplace = canReplaceOpportunityDocument(opportunityStatus, document);
+            const canDelete = canDeleteOpportunityDocument(opportunityStatus, document);
+            const isEditing = editingId === document.id;
             return (
-              <li key={document.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3">
-                <div>
-                  <p className="font-medium text-sm">{document.name}</p>
-                  <p className="text-xs text-muted-foreground">{opportunityDocumentTypeLabel(document.type)}</p>
+              <li key={document.id} className="rounded-lg border p-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-sm">{document.name}</p>
+                    <p className="text-xs text-muted-foreground">{opportunityDocumentTypeLabel(document.type)}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {document.type === "investment_contract" ? (
+                      <Button size="sm" variant="outline" disabled={downloadingId === document.id} onClick={() => void downloadContract(document)}>
+                        <Download className="mr-2 h-4 w-4" /> {downloadingId === document.id ? "Baixando..." : "Baixar contrato"}
+                      </Button>
+                    ) : link ? (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={link} target="_blank" rel="noopener noreferrer"><Download className="mr-2 h-4 w-4" /> Abrir arquivo</a>
+                      </Button>
+                    ) : <span className="text-xs text-muted-foreground">Arquivo indisponível</span>}
+                    {canReplace && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={mutationsDisabled}
+                        onClick={() => isEditing ? setEditingId(null) : beginReplace(document)}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" /> {isEditing ? "Cancelar edição" : "Substituir"}
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive hover:text-destructive"
+                        disabled={mutationsDisabled}
+                        onClick={() => setDeleteTarget(document)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {document.type === "investment_contract" ? (
-                  <Button size="sm" variant="outline" disabled={downloadingId === document.id} onClick={() => void downloadContract(document)}>
-                    <Download className="mr-2 h-4 w-4" /> {downloadingId === document.id ? "Baixando..." : "Baixar contrato"}
-                  </Button>
-                ) : link ? (
-                  <Button asChild size="sm" variant="outline">
-                    <a href={link} target="_blank" rel="noopener noreferrer"><Download className="mr-2 h-4 w-4" /> Abrir arquivo</a>
-                  </Button>
-                ) : <span className="text-xs text-muted-foreground">Arquivo indisponível</span>}
+
+                {isEditing && (
+                  <form className="rounded-md bg-muted/30 p-3 space-y-3" onSubmit={(event) => void submitReplace(event, document)}>
+                    <p className="text-xs text-muted-foreground">
+                      A substituição preserva o tipo “{opportunityDocumentTypeLabel(document.type)}” e exige um novo PDF.
+                    </p>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor={`replace-document-name-${document.id}`}>Nome do documento</Label>
+                        <Input
+                          id={`replace-document-name-${document.id}`}
+                          maxLength={128}
+                          value={replaceName}
+                          disabled={mutationsDisabled}
+                          onChange={(event) => setReplaceName(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor={`replace-document-file-${document.id}`}>Novo PDF</Label>
+                        <Input
+                          key={replaceFileKey}
+                          id={`replace-document-file-${document.id}`}
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={mutationsDisabled}
+                          onChange={(event) => setReplaceFile(event.target.files?.[0] ?? null)}
+                        />
+                      </div>
+                    </div>
+                    <Button type="submit" size="sm" disabled={mutationsDisabled}>
+                      {mutationKey === `replace-${document.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                      {mutationKey === `replace-${document.id}` ? "Substituindo..." : "Confirmar substituição"}
+                    </Button>
+                  </form>
+                )}
               </li>
             );
           })}
         </ul>
       )}
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && !mutationKey && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir documento da oportunidade?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O arquivo “{deleteTarget?.name}” será removido. Esta ação não altera os documentos cadastrais da empresa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(mutationKey)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={Boolean(mutationKey)}
+              onClick={(event) => {
+                event.preventDefault();
+                void submitDelete();
+              }}
+            >
+              {deleteTarget && mutationKey === `delete-${deleteTarget.id}` && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Excluir documento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }
