@@ -15,6 +15,7 @@
     "test:opportunity-lifecycle": "node --experimental-strip-types src/features/campaign-creation/opportunity-lifecycle.assertions.ts",
     "test:company-information": "node --experimental-strip-types src/features/company-information/company-information.assertions.ts",
     "test:opportunity-edit": "node --experimental-strip-types src/features/campaign-edit/owner-content-edit.assertions.ts",
+    "test:debt-summary": "node --experimental-strip-types src/features/campaign-debt/debt-summary.assertions.ts",
     "test:password-policy": "node --experimental-strip-types src/features/auth/password-policy.assertions.ts",
     "lint": "eslint .",
     "format": "prettier --write ."

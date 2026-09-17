@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft, Percent, Clock, Banknote, AlertCircle, CheckCircle2, Timer, Calendar,
   QrCode, FlaskConical, X, Copy, RefreshCw,
@@ -10,8 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getDebt, payNextInstallment, debtSimulatePayment } from "@/services/api";
+import { getDebt, getDebtSummary, payNextInstallment, debtSimulatePayment } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import {
+  formatDebtSummaryDate,
+  parseDebtSummary,
+  type DebtSummary,
+} from "@/features/campaign-debt/debt-summary";
 
 const FREQ_MAP: Record<string, string> = {
   monthly: "Mensal",
@@ -19,12 +24,20 @@ const FREQ_MAP: Record<string, string> = {
   semiannual: "Semestral",
   annual: "Anual",
   at_maturity: "No vencimento",
+  mensal: "Mensal",
+  bimestral: "Bimestral",
+  trimestral: "Trimestral",
+  semestral: "Semestral",
+  anual: "Anual",
+  unica: "Única",
 };
+
+type SerializedDueDate = string | null | { c?: { year?: number; month?: number; day?: number } };
 
 type Installment = {
   id: number;
   value: number;
-  due_date: string | null | Record<string, any>;
+  due_date: SerializedDueDate;
   status: string;
 };
 
@@ -36,12 +49,12 @@ type ChargeData = {
   expiration_at: string | null;
 };
 
-function parseDueDate(raw: string | null | Record<string, any>): string | null {
+function parseDueDate(raw: SerializedDueDate): string | null {
   if (!raw) return null;
   if (typeof raw === 'string') return raw;
   // Luxon DateTime serialized as object: { c: { year, month, day, ... } }
   if (typeof raw === 'object') {
-    const c = (raw as any).c;
+    const c = raw.c;
     if (c && c.year && c.month && c.day) {
       const y = String(c.year).padStart(4, '0');
       const m = String(c.month).padStart(2, '0');
@@ -50,6 +63,14 @@ function parseDueDate(raw: string | null | Record<string, any>): string | null {
     }
   }
   return null;
+}
+
+function debtActionError(error: unknown, fallback: string): string {
+  if (typeof error === "object" && error !== null) {
+    const response = error as { errors?: Array<{ message?: string }>; message?: string };
+    return response.errors?.[0]?.message ?? response.message ?? fallback;
+  }
+  return fallback;
 }
 
 const IS_DEV = import.meta.env.DEV;
@@ -91,18 +112,41 @@ export default function CampaignDebtPage() {
   const [charge, setCharge] = useState<ChargeData | null>(null);
   const [chargeError, setChargeError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [summary, setSummary] = useState<DebtSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState(false);
+  const [summaryRetry, setSummaryRetry] = useState(0);
 
-  const reload = () => {
+  const reload = useCallback(() => {
     if (!id) return;
     setLoading(true);
+    setError(false);
     setCharge(null);
     getDebt(Number(id))
       .then((res) => setDebt(res?.data ?? null))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  };
+  }, [id]);
 
-  useEffect(() => { reload(); }, [id]);
+  useEffect(() => { reload(); }, [reload]);
+
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    setSummary(null);
+    setSummaryError(false);
+    setSummaryLoading(true);
+    getDebtSummary(Number(id))
+      .then((response) => {
+        if (!active) return;
+        const parsed = parseDebtSummary(response?.data);
+        if (parsed) setSummary(parsed);
+        else setSummaryError(true);
+      })
+      .catch(() => { if (active) setSummaryError(true); })
+      .finally(() => { if (active) setSummaryLoading(false); });
+    return () => { active = false; };
+  }, [id, summaryRetry]);
 
   const handleGenerateCharge = async () => {
     if (!id) return;
@@ -111,8 +155,8 @@ export default function CampaignDebtPage() {
     try {
       const res = await payNextInstallment(Number(id));
       setCharge(res?.data ?? null);
-    } catch (e: any) {
-      setChargeError(e?.errors?.[0]?.message ?? 'Erro ao gerar cobrança');
+    } catch (error: unknown) {
+      setChargeError(debtActionError(error, 'Erro ao gerar cobrança'));
     } finally {
       setCharging(false);
     }
@@ -125,8 +169,9 @@ export default function CampaignDebtPage() {
       await debtSimulatePayment(charge.txid);
       setCharge(null);
       reload();
-    } catch (e: any) {
-      setChargeError(e?.errors?.[0]?.message ?? e?.message ?? 'Erro ao simular pagamento');
+      setSummaryRetry((value) => value + 1);
+    } catch (error: unknown) {
+      setChargeError(debtActionError(error, 'Erro ao simular pagamento'));
     } finally {
       setSimulating(false);
     }
@@ -375,11 +420,52 @@ export default function CampaignDebtPage() {
         </div>
       )}
 
-      {/* Installments Table */}
+      {/* Authoritative projection, separate from generated installment state. */}
+      <Card className="p-5 border-border/60 space-y-4">
+        <div>
+          <h3 className="font-semibold text-foreground">Prévia do cronograma (API)</h3>
+          <p className="text-xs text-muted-foreground mt-1">Projeção não indica parcela gerada, cobrada ou paga. As datas vêm do resumo da API; valores cobrados e status constam nas parcelas registradas abaixo.</p>
+        </div>
+        {summaryLoading && <Skeleton className="h-24 w-full" />}
+        {!summaryLoading && summaryError && (
+          <div className="flex items-center justify-between gap-3">
+            <p role="alert" className="text-sm text-destructive">Não foi possível carregar a prévia do cronograma.</p>
+            <Button variant="outline" onClick={() => setSummaryRetry((value) => value + 1)}>Tentar novamente</Button>
+          </div>
+        )}
+        {!summaryLoading && summary && (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3 text-sm">
+              <div><p className="text-muted-foreground">Base usada pela API</p><p className="font-medium">{formatDebtSummaryDate(summary.base_date)}</p></div>
+              <div><p className="text-muted-foreground">Início configurado</p><p className="font-medium">{summary.payment_start_at ? formatDebtSummaryDate(summary.payment_start_at) : "Não configurado"}</p></div>
+              <div><p className="text-muted-foreground">Primeiro vencimento projetado</p><p className="font-medium">{formatDebtSummaryDate(summary.first_due)}</p></div>
+            </div>
+            <p className="text-xs text-muted-foreground">{summary.total_installments} parcela(s) · {summary.grace_period} mês(es) de carência · {FREQ_MAP[summary.payment_frequency] ?? summary.payment_frequency}</p>
+            {summary.parcelas.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-border text-muted-foreground">
+                    <th className="py-2 text-left">Parcela prevista</th>
+                    <th className="py-2 text-right">Vencimento previsto</th>
+                  </tr></thead>
+                  <tbody>{summary.parcelas.map((row) => (
+                    <tr key={row.installment_number} className="border-b border-border/50">
+                      <td className="py-2">{row.installment_number}ª</td>
+                      <td className="py-2 text-right">{formatDebtSummaryDate(row.due_date)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : <p className="text-sm text-muted-foreground">A API ainda não retornou parcelas projetadas.</p>}
+          </>
+        )}
+      </Card>
+
+      {/* Generated installments, never inferred from the projection. */}
       <Card className="border-border/60 overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
           <h3 className="font-semibold text-foreground flex items-center gap-2">
-            <Banknote className="w-4 h-4" /> Cronograma de Parcelas
+            <Banknote className="w-4 h-4" /> Parcelas registradas
           </h3>
           <span className="text-xs text-muted-foreground">{installments.length} parcela(s) no total</span>
         </div>
