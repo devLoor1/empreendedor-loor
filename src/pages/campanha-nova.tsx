@@ -68,6 +68,10 @@ import {
   mergeOpportunityProfilePrefill,
   type OpportunityProfilePrefill,
 } from "@/features/campaign-creation/opportunity-profile-prefill";
+import {
+  readCompanyInformation,
+  type CompanyInformation,
+} from "@/features/company-information/company-information";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -94,6 +98,7 @@ import {
   getBanks,
   getAddress,
   getBankingInformation,
+  getCompanyInformation,
   getCountries,
   getPersonalInformation,
   getSegments,
@@ -143,7 +148,6 @@ type CountryOption = ReferenceOption & CountryReference;
 type CampaignDraft = {
   modality: CampaignModality | null;
   opportunityName: string;
-  documentNumber: string;
   responsibleCpf: string;
   speCnpj: string;
   segment: string;
@@ -190,7 +194,6 @@ type StepConfig = {
 const INITIAL_DRAFT: CampaignDraft = {
   modality: null,
   opportunityName: "",
-  documentNumber: "",
   responsibleCpf: "",
   speCnpj: "",
   segment: "",
@@ -316,7 +319,6 @@ const SUBMIT_ERROR_FIELD_META: Record<
   "opportunity.company_cnpj": {
     label: "CNPJ da empresa",
     step: "basics",
-    focusId: "documentNumber",
   },
   "opportunity.spe_cnpj": {
     label: "CNPJ da SPE",
@@ -583,13 +585,14 @@ function getDraftValidation(
   segments: ReferenceOption[] = [],
   banks: ReferenceOption[] = [],
   countries: CountryOption[] = [],
+  canonicalCompanyCnpj = "",
 ): WizardValidation {
   const target = toPositiveNumber(draft.targetAmount);
   const share = toPositiveNumber(draft.shareValue);
   const quotaCount = getQuotaCount(draft.targetAmount, draft.shareValue);
   const basicsValid =
     fieldHasText(draft.opportunityName, 3) &&
-    isValidDocument(draft.documentNumber, "cnpj") &&
+    isValidDocument(canonicalCompanyCnpj, "cnpj") &&
     isValidDocument(draft.responsibleCpf, "cpf") &&
     isValidDocument(draft.speCnpj, "cnpj") &&
     hasReferenceId(segments, draft.segment) &&
@@ -741,7 +744,7 @@ function getBackendErrorEntries(error: unknown) {
 
 function getFriendlySubmitErrorMessage(field: string, rule: string, fallbackMessage: string) {
   if (rule === "unique" && field === "opportunity.company_cnpj") {
-    return "Este CNPJ da empresa já está sendo usado em outra oportunidade. Informe outro CNPJ ou confirme se a oportunidade já foi cadastrada.";
+    return "O CNPJ canônico da empresa já está em outra oportunidade. Não informe outro CNPJ: confirme a oportunidade existente ou solicite a revisão do contrato de criação.";
   }
 
   if (rule === "unique" && field === "opportunity.spe_cnpj") {
@@ -833,6 +836,9 @@ function getSubmitErrorMessage(error: unknown) {
   if (error && typeof error === "object") {
     const record = error as Record<string, unknown>;
 
+    if (typeof record.message === "string" && record.message.includes("company_cnpj must match")) {
+      return "O CNPJ da oportunidade diverge do CNPJ canônico do Perfil da empresa. Recarregue e revise o perfil antes de tentar novamente.";
+    }
     if (typeof record.message === "string" && record.message.trim()) return record.message;
     if (typeof record.error === "string" && record.error.trim()) return record.error;
     if (Number(record.status) === 422) {
@@ -1169,6 +1175,9 @@ function ModalityStep({
 
 function BasicsStep({
   draft,
+  companyInformation,
+  companyLoading,
+  companyError,
   segments,
   referencesLoading,
   onPatch,
@@ -1178,6 +1187,9 @@ function BasicsStep({
   submitError,
 }: {
   draft: CampaignDraft;
+  companyInformation: CompanyInformation | null;
+  companyLoading: boolean;
+  companyError: boolean;
   segments: ReferenceOption[];
   referencesLoading: boolean;
   onPatch: (patch: Partial<CampaignDraft>) => void;
@@ -1232,23 +1244,21 @@ function BasicsStep({
 
         <div className="grid gap-4 md:grid-cols-3">
           <FormField id="documentNumber" label="CNPJ da empresa">
-            <Input
-              id="documentNumber"
-              value={draft.documentNumber}
-              onChange={(event) => onPatch({ documentNumber: formatCnpj(event.target.value) })}
-              placeholder="00.000.000/0000-00"
-              inputMode="numeric"
-              aria-invalid={Boolean(companyCnpjError)}
-              className={cn(
-                companyCnpjError && "border-destructive focus-visible:ring-destructive/40",
-              )}
-            />
+            <div id="documentNumber" className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              {companyInformation ? formatCnpj(companyInformation.cnpj) : companyLoading ? "Carregando CNPJ..." : "CNPJ não disponível"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {companyInformation
+                ? "CNPJ canônico do Perfil da empresa; não é alterado nesta oportunidade."
+                : companyError
+                  ? "Não foi possível ler o CNPJ canônico. Recarregue a página antes de continuar."
+                  : <>Cadastre o CNPJ canônico no <Link className="underline" to="/app/perfil-empresa">Perfil da empresa</Link> antes de criar a oportunidade.</>}
+            </p>
             {companyCnpjError && (
               <p className="text-xs leading-relaxed text-destructive">
                 {companyCnpjError.message}
               </p>
             )}
-            {getDocumentHint(draft.documentNumber, "cnpj", "CNPJ da empresa")}
           </FormField>
 
           <FormField id="responsibleCpf" label="CPF do responsável">
@@ -2568,11 +2578,14 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 
 export default function CampaignCreatePage() {
   const readiness = useCampaignReadiness();
+  const [companyInformation, setCompanyInformation] = useState<CompanyInformation | null>(null);
+  const [companyLoading, setCompanyLoading] = useState(true);
+  const [companyError, setCompanyError] = useState(false);
   const blockingPrerequisites = useMemo(
     () => getBlockingPrerequisites(readiness.items),
     [readiness.items],
   );
-  const canStart = !readiness.loading && blockingPrerequisites.length === 0;
+  const canStart = !readiness.loading && blockingPrerequisites.length === 0 && !companyLoading && !companyError && !!companyInformation;
   const hasBlockingContract = blockingPrerequisites.some((item) => item.status === "blocked");
   const [previewWizard, setPreviewWizard] = useState(false);
   const [currentStep, setCurrentStep] = useState<WizardStep>("modality");
@@ -2594,8 +2607,8 @@ export default function CampaignCreatePage() {
   const [createdOpportunityId, setCreatedOpportunityId] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState<SubmitErrorState>(null);
   const validation = useMemo(
-    () => getDraftValidation(draft, segments, banks, countries),
-    [banks, countries, draft, segments],
+    () => getDraftValidation(draft, segments, banks, countries, companyInformation?.cnpj ?? ""),
+    [banks, companyInformation?.cnpj, countries, draft, segments],
   );
   const showWizard = canStart || previewWizard;
 
@@ -2657,10 +2670,11 @@ export default function CampaignCreatePage() {
     let active = true;
 
     async function loadProfileCopies() {
-      const [personalResult, addressResult, bankingResult] = await Promise.allSettled([
+      const [personalResult, addressResult, bankingResult, companyResult] = await Promise.allSettled([
         getPersonalInformation(),
         getAddress(),
         getBankingInformation(),
+        getCompanyInformation(),
       ]);
       if (!active) return;
 
@@ -2677,6 +2691,18 @@ export default function CampaignCreatePage() {
         banks.map((bank) => bank.id),
       );
       profilePrefillRef.current = values;
+      if (companyResult.status === "fulfilled") {
+        try {
+          const canonical = readCompanyInformation(companyResult.value);
+          setCompanyInformation(canonical);
+          setCompanyError(false);
+        } catch {
+          setCompanyError(true);
+        }
+      } else {
+        setCompanyError(true);
+      }
+      setCompanyLoading(false);
       setDraft((current) =>
         mergeOpportunityProfilePrefill(current, values, touchedDraftFieldsRef.current),
       );
@@ -2780,6 +2806,13 @@ export default function CampaignCreatePage() {
     setSubmitError(null);
 
     try {
+      const latestCompany = readCompanyInformation(await getCompanyInformation());
+      if (!latestCompany || !companyInformation || latestCompany.cnpj !== companyInformation.cnpj) {
+        setCompanyInformation(latestCompany);
+        setCurrentStep("basics");
+        toast.error("O CNPJ canônico mudou ou está indisponível. Revise a etapa básica antes de enviar.");
+        return;
+      }
       const imageId = await uploadCampaignImage(draft.heroImageFile, "opportunities/banner");
       const extraImageIds: number[] = [];
 
@@ -2807,7 +2840,7 @@ export default function CampaignCreatePage() {
         },
         members: [],
         monetary: buildOpportunityMonetaryPayload(draft.targetAmount, draft.shareValue),
-        opportunity: buildOpportunityContentPayload(draft, imageId),
+        opportunity: buildOpportunityContentPayload(draft, imageId, latestCompany.cnpj),
         ...(draft.modality === "debt"
           ? {
               debt: {
@@ -2899,8 +2932,8 @@ export default function CampaignCreatePage() {
           <LockKeyhole className="h-4 w-4" />
           <AlertTitle>Campanha ainda não liberada</AlertTitle>
           <AlertDescription>
-            Resolva os itens pendentes antes de iniciar uma criação real. A estrutura abaixo pode
-            ser visualizada de forma segura, sem enviar dados ao backend.
+            Resolva os itens pendentes, incluindo o CNPJ canônico no Perfil da empresa, antes de
+            iniciar uma criação real. A estrutura abaixo pode ser visualizada sem enviar dados.
           </AlertDescription>
         </Alert>
       )}
@@ -2931,6 +2964,13 @@ export default function CampaignCreatePage() {
         </CardHeader>
         <CardContent>
           <CampaignPrerequisiteList items={readiness.items} loading={readiness.loading} />
+          {!companyLoading && !companyInformation && (
+            <p className="mt-3 text-sm text-destructive">
+              {companyError
+                ? "Não foi possível confirmar o CNPJ canônico. Recarregue a página."
+                : <>CNPJ canônico ausente. Cadastre-o no <Link className="underline" to="/app/perfil-empresa">Perfil da empresa</Link>.</>}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -2986,6 +3026,9 @@ export default function CampaignCreatePage() {
           {currentStep === "basics" && (
             <BasicsStep
               draft={draft}
+              companyInformation={companyInformation}
+              companyLoading={companyLoading}
+              companyError={companyError}
               segments={segments}
               referencesLoading={referencesLoading}
               onPatch={patchDraft}
