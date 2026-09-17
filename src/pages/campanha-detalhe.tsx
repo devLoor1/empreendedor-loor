@@ -68,7 +68,9 @@ import {
   buildOwnerContentPatch,
   canEditOwnerContent,
   ownerContentReadbackMatches,
+  ownerContentSourceMatches,
   toOwnerContentDraft,
+  validateOwnerIdentityPatch,
   type OwnerContentPatch,
 } from "@/features/campaign-edit/owner-content-edit";
 
@@ -372,6 +374,11 @@ function OpportunityContentEditor({
       setError("");
       return;
     }
+    const identityError = validateOwnerIdentityPatch(patch);
+    if (identityError) {
+      setError(identityError);
+      return;
+    }
     if ((patch.about !== undefined && !patch.about) ||
         (patch.description !== undefined && !patch.description)) {
       setError("Descrição e sobre a oportunidade não podem ficar vazios.");
@@ -393,7 +400,7 @@ function OpportunityContentEditor({
     setSaving(true);
     setError("");
     setSuccess(false);
-    let patchSent = false;
+    let patchAttempted = false;
     try {
       const before = await getOpportunity(opportunity.id);
       const current = before.data as OpportunityDetail;
@@ -401,20 +408,18 @@ function OpportunityContentEditor({
         setError("Esta oportunidade não está mais disponível para edição. Recarregue a página.");
         return;
       }
-      if (current.about !== opportunity.about ||
-          current.description !== opportunity.description ||
-          current.promotional_video_url !== opportunity.promotional_video_url) {
+      if (!ownerContentSourceMatches(opportunity, current)) {
         onReadback(current);
         setDraft(toOwnerContentDraft(current));
         setError("Os dados foram alterados em outra sessão. Revise o conteúdo atualizado antes de salvar.");
         return;
       }
-      await updateOpportunity(opportunity.id, patch);
-      patchSent = true;
       setPendingPatch(patch);
+      patchAttempted = true;
+      await updateOpportunity(opportunity.id, patch);
       await confirmReadback(patch);
     } catch (cause) {
-      setError(patchSent
+      setError(patchAttempted
         ? `A alteração foi enviada, mas a leitura ainda não foi confirmada. ${opportunityEditError(cause)}`
         : opportunityEditError(cause));
     } finally {
@@ -442,10 +447,10 @@ function OpportunityContentEditor({
     <Card className="p-5 border-border/60 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="font-semibold text-foreground">Conteúdo da oportunidade</h3>
+          <h3 className="font-semibold text-foreground">Conteúdo e identidade da oportunidade</h3>
           <p className="text-sm text-muted-foreground">
             {editable
-              ? "Descrição, apresentação e vídeo podem ser ajustados enquanto a oportunidade está em análise ou ativa."
+              ? "Nome, empresa exibida, descrição, apresentação e vídeo podem ser ajustados enquanto a oportunidade está em análise ou ativa."
               : "A edição deste conteúdo não está disponível para esta etapa da oportunidade."}
           </p>
         </div>
@@ -460,6 +465,19 @@ function OpportunityContentEditor({
       </div>
       {editing && !pendingPatch && (
         <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-name">Nome da oportunidade</Label>
+            <Input id="opportunity-name" maxLength={255} value={draft.name}
+              onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="opportunity-business-name">Nome empresarial exibido</Label>
+            <Input id="opportunity-business-name" maxLength={255} value={draft.business_name}
+              onChange={(event) => setDraft({ ...draft, business_name: event.target.value })} />
+            <p className="text-xs text-muted-foreground">
+              Este valor pertence à oportunidade e não altera a Company canônica do perfil.
+            </p>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="opportunity-description">Descrição</Label>
             <Textarea id="opportunity-description" value={draft.description}
@@ -494,7 +512,7 @@ function OpportunityContentEditor({
         </div>
       )}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {success && <p role="status" className="text-sm text-success">Conteúdo salvo e confirmado pela leitura da oportunidade.</p>}
+      {success && <p role="status" className="text-sm text-success">Conteúdo e identidade salvos e confirmados pela leitura da oportunidade.</p>}
     </Card>
   );
 }
