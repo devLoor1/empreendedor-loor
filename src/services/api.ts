@@ -213,6 +213,30 @@ export async function saveAddress(data: Record<string, unknown>) {
   });
 }
 
+// ── Canonical company information ─────────────────────────────────────────────
+
+export async function getCompanyInformation() {
+  return apiFetch('/entrepreneurs/company-information');
+}
+
+export async function saveCompanyInformation(data: {
+  cnpj: string;
+  name: string;
+  fantasy_name: string | null;
+  phone: string | null;
+  email: string | null;
+  validate: boolean;
+}) {
+  return apiFetch('/entrepreneurs/company-information', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function validateCompanyInformation() {
+  return apiFetch('/entrepreneurs/company-information/validate', { method: 'POST' });
+}
+
 // ── Banking ───────────────────────────────────────────────────────────────────
 
 export async function getBankingInformation() {
