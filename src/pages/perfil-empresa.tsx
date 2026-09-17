@@ -15,8 +15,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { getAddress, saveAddress } from "@/services/api";
-import { lookupCep, lookupCnpjInfo } from "@/utils/brasil-api";
+import {
+  getAddress,
+  getCompanyInformation,
+  saveAddress,
+  saveCompanyInformation,
+  validateCompanyInformation,
+} from "@/services/api";
+import {
+  COMPANY_STATUS_LABEL,
+  EMPTY_COMPANY,
+  companyFormMatches,
+  companySavePayload,
+  readCompanyInformation,
+  toCompanyForm,
+  type CompanyForm,
+  type CompanyInformation,
+} from "@/features/company-information/company-information";
+import { lookupCep } from "@/utils/brasil-api";
 import {
   formatBrazilPhone,
   formatCep,
@@ -38,14 +54,6 @@ type AddressForm = {
   complement: string;
 };
 
-type CompanyForm = {
-  cnpj: string;
-  legal_name: string;
-  trade_name: string;
-  phone: string;
-  email: string;
-};
-
 type CompanyNotice = {
   kind: "info" | "error";
   title: string;
@@ -61,14 +69,6 @@ const EMPTY_ADDRESS: AddressForm = {
   street_name: "",
   number: "",
   complement: "",
-};
-
-const EMPTY_COMPANY: CompanyForm = {
-  cnpj: "",
-  legal_name: "",
-  trade_name: "",
-  phone: "",
-  email: "",
 };
 
 const UF_OPTIONS = [
@@ -126,7 +126,7 @@ function isValidCnpj(value: string) {
   return digits.endsWith(`${firstDigit}${secondDigit}`);
 }
 
-function getErrorMessage(error: unknown) {
+function getErrorMessage(error: unknown, fallback = "Não foi possível salvar o endereço. Tente novamente.") {
   if (typeof error === "object" && error !== null) {
     const candidate = error as { errors?: Array<{ message?: string }>; message?: string };
     const message = candidate.errors?.[0]?.message || candidate.message;
@@ -140,7 +140,7 @@ function getErrorMessage(error: unknown) {
     }
   }
 
-  return "Não foi possível salvar o endereço. Tente novamente.";
+  return fallback;
 }
 
 function getAddressData(response: unknown): Partial<AddressForm> | null {
@@ -179,11 +179,13 @@ function hasConfirmedAddress(data: Partial<AddressForm> | null): data is Partial
 export default function CompanyPage() {
   const [address, setAddress] = useState<AddressForm>(EMPTY_ADDRESS);
   const [company, setCompany] = useState<CompanyForm>(EMPTY_COMPANY);
+  const [persistedCompany, setPersistedCompany] = useState<CompanyInformation | null>(null);
+  const [companyLoadError, setCompanyLoadError] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [companyChecked, setCompanyChecked] = useState(false);
   const [companyLookupLoading, setCompanyLookupLoading] = useState(false);
+  const [companySaving, setCompanySaving] = useState(false);
   const [companyNotice, setCompanyNotice] = useState<CompanyNotice | null>(null);
   const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
   const lastRequestedCepRef = useRef("");
@@ -191,19 +193,30 @@ export default function CompanyPage() {
 
   const cnpjIsFilled = onlyDigits(company.cnpj).length > 0;
   const cnpjIsValid = isValidCnpj(company.cnpj);
+  const companyIsSaved = companyFormMatches(persistedCompany, company);
 
   useEffect(() => {
-    getAddress()
-      .then((res) => {
-        const persistedAddress = getAddressData(res);
-
+    Promise.allSettled([getAddress(), getCompanyInformation()]).then(([addressResult, companyResult]) => {
+      if (addressResult.status === "fulfilled") {
+        const persistedAddress = getAddressData(addressResult.value);
         if (persistedAddress) {
           setAddress(toAddressForm(persistedAddress));
           setSaved(hasConfirmedAddress(persistedAddress));
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      }
+      if (companyResult.status === "fulfilled") {
+        try {
+          const persisted = readCompanyInformation(companyResult.value);
+          setPersistedCompany(persisted);
+          setCompany(toCompanyForm(persisted));
+        } catch {
+          setCompanyLoadError(true);
+        }
+      } else {
+        setCompanyLoadError(true);
+      }
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -272,71 +285,80 @@ export default function CompanyPage() {
 
   const updCompany = (patch: Partial<CompanyForm>) => {
     setCompany((current) => ({ ...current, ...patch }));
+    setCompanyNotice(null);
+  };
 
-    if ("cnpj" in patch) {
-      setCompanyChecked(false);
-      setCompanyNotice(null);
+  const reloadCompany = async () => {
+    const persisted = readCompanyInformation(await getCompanyInformation());
+    setPersistedCompany(persisted);
+    setCompany(toCompanyForm(persisted));
+    setCompanyLoadError(false);
+    return persisted;
+  };
+
+  const handleSaveCompany = async () => {
+    if (!cnpjIsValid || !company.legal_name.trim()) {
+      toast.error("Informe um CNPJ válido e a razão social.");
+      return;
+    }
+    setCompanySaving(true);
+    setCompanyNotice(null);
+    try {
+      const payload = companySavePayload(company);
+      await saveCompanyInformation(payload);
+      const persisted = readCompanyInformation(await getCompanyInformation());
+      if (!persisted || !companyFormMatches(persisted, company)) {
+        throw new Error("Dados enviados, mas o readback da empresa não confirmou o salvamento.");
+      }
+      setPersistedCompany(persisted);
+      setCompany(toCompanyForm(persisted));
+      toast.success("Dados da empresa salvos e confirmados.");
+    } catch (error) {
+      setCompanyNotice({
+        kind: "error",
+        title: "Salvamento não confirmado",
+        description: getErrorMessage(error, "Não foi possível salvar ou confirmar os dados da empresa."),
+      });
+    } finally {
+      setCompanySaving(false);
     }
   };
 
   const handleValidateCompany = async () => {
-    if (!cnpjIsFilled) {
-      setCompanyChecked(false);
+    if (!cnpjIsValid) {
       setCompanyNotice({
         kind: "error",
-        title: "Informe o CNPJ",
-        description: "Digite um CNPJ para validar o formato antes de revisar os dados da empresa.",
+        title: "CNPJ inválido",
+        description: "Revise os números e o dígito verificador antes de validar.",
       });
       return;
     }
 
-    if (!cnpjIsValid) {
-      setCompanyChecked(false);
+    if (!companyIsSaved) {
       setCompanyNotice({
         kind: "error",
-        title: "CNPJ inválido",
-        description:
-          "Revise os números informados. O formato visual pode estar correto, mas o dígito verificador não confere.",
+        title: "Salve a empresa primeiro",
+        description: "A validação da API usa o CNPJ já salvo. Salve os dados e tente novamente.",
       });
       return;
     }
 
     setCompanyLookupLoading(true);
-
     try {
-      const result = await lookupCnpjInfo(company.cnpj);
-
-      if (result) {
-        setCompany((current) => ({
-          ...current,
-          legal_name: current.legal_name || result.razao_social || "",
-          trade_name: current.trade_name || result.nome_fantasia || "",
-          phone: current.phone || formatBrazilPhone(result.ddd_telefone_1 || ""),
-          email: current.email || result.email || "",
-        }));
-        setCompanyNotice({
-          kind: "info",
-          title: "CNPJ encontrado na BrasilAPI",
-          description:
-            "Dados disponíveis foram sugeridos em campos vazios. A validação operacional continua dependendo do backend/processo.",
-        });
-      } else {
-        setCompanyNotice({
-          kind: "info",
-          title: "CNPJ validado localmente",
-          description:
-            "A BrasilAPI não retornou dados agora. Isso não bloqueia o fluxo; revise os campos manualmente.",
-        });
-      }
-
-      setCompanyChecked(true);
-    } catch {
-      setCompanyChecked(true);
+      await validateCompanyInformation();
+      const persisted = await reloadCompany();
       setCompanyNotice({
         kind: "info",
-        title: "CNPJ validado localmente",
-        description:
-          "Não foi possível consultar a BrasilAPI agora. Isso não bloqueia o fluxo; revise os campos manualmente.",
+        title: "Consulta concluída",
+        description: persisted
+          ? `Status registrado pela API: ${COMPANY_STATUS_LABEL[persisted.validation_status] ?? persisted.validation_status}.`
+          : "A API não retornou uma empresa salva. Recarregue e tente novamente.",
+      });
+    } catch (error) {
+      setCompanyNotice({
+        kind: "error",
+        title: "Validação não confirmada",
+        description: getErrorMessage(error, "Não foi possível validar o CNPJ na API."),
       });
     } finally {
       setCompanyLookupLoading(false);
@@ -391,9 +413,9 @@ export default function CompanyPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {companyChecked && (
+          {persistedCompany && companyIsSaved && (
             <Badge className="bg-primary/10 text-primary hover:bg-primary/10">
-              <CheckCircle2 className="w-3 h-3 mr-1" /> CNPJ validado
+              <CheckCircle2 className="w-3 h-3 mr-1" /> Empresa salva
             </Badge>
           )}
           {saved && (
@@ -412,8 +434,8 @@ export default function CompanyPage() {
           <div>
             <h2 className="font-semibold text-foreground">Dados da empresa</h2>
             <p className="text-sm text-muted-foreground">
-              O contrato atual ainda não expõe busca ou salvamento de empresa por CNPJ; por isso
-              esta seção não cria nem altera dados empresariais no backend.
+              CNPJ e dados empresariais canônicos da sua conta. Salve as alterações antes de
+              validar o CNPJ na API.
             </p>
           </div>
         </div>
@@ -426,15 +448,16 @@ export default function CompanyPage() {
               placeholder="00.000.000/0000-00"
               inputMode="numeric"
               aria-invalid={cnpjIsFilled && !cnpjIsValid}
+              disabled={companyLoadError || companySaving || companyLookupLoading}
             />
           </Field>
-          <Button type="button" variant="outline" onClick={handleValidateCompany} disabled={companyLookupLoading}>
+          <Button type="button" variant="outline" onClick={handleValidateCompany} disabled={companyLoadError || companySaving || companyLookupLoading}>
             {companyLookupLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
               <Search className="w-4 h-4" />
             )}
-            {companyLookupLoading ? "Consultando..." : "Validar CNPJ"}
+            {companyLookupLoading ? "Consultando..." : "Validar na API"}
           </Button>
         </div>
         {company.cnpj && (
@@ -442,7 +465,7 @@ export default function CompanyPage() {
             valid={isValidCnpjShape(company.cnpj)}
             message={
               isValidCnpjShape(company.cnpj)
-                ? "CNPJ completo para consulta auxiliar."
+                ? "CNPJ completo; o dígito verificador é conferido ao salvar."
                 : `${onlyDigits(company.cnpj).length}/14 dígitos.`
             }
           />
@@ -459,12 +482,23 @@ export default function CompanyPage() {
           </Alert>
         )}
 
+        {companyLoadError && (
+          <Alert variant="destructive">
+            <CircleAlert className="h-4 w-4" />
+            <AlertTitle>Empresa não carregada</AlertTitle>
+            <AlertDescription>
+              Não é seguro salvar antes de ler o registro atual. <Button type="button" variant="link" className="h-auto p-0" onClick={() => void reloadCompany().catch(() => toast.error("A leitura da empresa continua indisponível."))}>Tentar novamente</Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Razão social">
             <Input
               value={company.legal_name}
               onChange={(e) => updCompany({ legal_name: e.target.value })}
               placeholder="Nome jurídico da empresa"
+              disabled={companyLoadError || companySaving || companyLookupLoading}
             />
           </Field>
           <Field label="Nome fantasia">
@@ -472,6 +506,7 @@ export default function CompanyPage() {
               value={company.trade_name}
               onChange={(e) => updCompany({ trade_name: e.target.value })}
               placeholder="Nome comercial"
+              disabled={companyLoadError || companySaving || companyLookupLoading}
             />
           </Field>
           <Field label="Telefone">
@@ -480,6 +515,7 @@ export default function CompanyPage() {
               onChange={(e) => updCompany({ phone: formatBrazilPhone(e.target.value) })}
               placeholder="(00) 00000-0000"
               inputMode="tel"
+              disabled={companyLoadError || companySaving || companyLookupLoading}
             />
             {company.phone && (
               <FieldHint
@@ -498,6 +534,7 @@ export default function CompanyPage() {
               onChange={(e) => updCompany({ email: e.target.value })}
               placeholder="empresa@exemplo.com"
               type="email"
+              disabled={companyLoadError || companySaving || companyLookupLoading}
             />
           </Field>
         </div>
@@ -507,23 +544,25 @@ export default function CompanyPage() {
             Status operacional
           </Label>
           <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 p-3">
-            <Badge variant="secondary">Pendente de validação</Badge>
+            <Badge variant="secondary">
+              {persistedCompany && companyIsSaved
+                ? COMPANY_STATUS_LABEL[persistedCompany.validation_status] ?? persistedCompany.validation_status
+                : persistedCompany ? "Alterações não salvas" : "Empresa ainda não cadastrada"}
+            </Badge>
             <span className="text-sm text-muted-foreground">
-              O status operacional depende de validação canônica da API e não pode ser editado
-              manualmente nesta tela.
+              {persistedCompany?.validated_at
+                ? `Última validação: ${new Date(persistedCompany.validated_at).toLocaleString("pt-BR")}.`
+                : "O status operacional é retornado pela API e não pode ser editado manualmente."}
             </span>
           </div>
         </div>
 
-        <Alert className="border-border/60">
-          <CircleAlert className="h-4 w-4" />
-          <AlertTitle>Validação empresarial pendente</AlertTitle>
-          <AlertDescription>
-            O CNPJ e o status operacional não bloqueiam a criação de campanhas neste ciclo. Quando a
-            API de empresa estiver disponível, este bloco deve consultar e persistir a situação
-            cadastral automaticamente.
-          </AlertDescription>
-        </Alert>
+        <div className="flex justify-end">
+          <Button type="button" onClick={handleSaveCompany} disabled={companyLoadError || companySaving || companyLookupLoading || companyIsSaved}>
+            {companySaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            {companySaving ? "Salvando..." : "Salvar empresa"}
+          </Button>
+        </div>
       </Card>
 
       <Card className="p-6 space-y-5 border-border/60">
