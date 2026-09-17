@@ -47,6 +47,7 @@ import {
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import { normalizeUploadFilename } from "@/utils/upload-validation";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
+import { readOpportunityBanking } from "@/features/campaign-creation/opportunity-banking-readback";
 import {
   canCreateOpportunityDocument,
   canDeleteOpportunityDocument,
@@ -992,6 +993,7 @@ function KPI({ icon: Icon, label, value, sub }: { icon: LucideIcon; label: strin
 /* ─── Overview Tab ─────────────────────────────────────────────────────────── */
 
 function OverviewTab({ opp }: { opp: OpportunityDetail }) {
+  const savedBanking = readOpportunityBanking(opp);
   return (
     <>
       <div className="grid lg:grid-cols-3 gap-6">
@@ -1069,6 +1071,27 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
               <p className="mt-2 text-xs text-muted-foreground">Endereço da oferta, independente do endereço cadastrado no perfil.</p>
             </Card>
           )}
+
+          <Card className="p-6 border-border/60 space-y-3">
+            <h3 className="font-semibold text-foreground flex items-center gap-2">
+              <Banknote className="w-4 h-4" /> Dados bancários da oportunidade
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Valores salvos nesta oportunidade; alterações no perfil não modificam esta cópia.
+            </p>
+            {savedBanking ? (
+              <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Banco (ID)</span><p>{savedBanking.bank_account.bank_id ?? "Não informado"}</p></div>
+                <div><span className="text-muted-foreground">Agência</span><p>{savedBanking.bank_account.agency ?? "Não informada"}</p></div>
+                <div><span className="text-muted-foreground">Conta</span><p>{savedBanking.bank_account.account ?? "Não informada"}</p></div>
+                <div><span className="text-muted-foreground">Dígito</span><p>{savedBanking.bank_account.account_digit ?? "Não informado"}</p></div>
+                <div><span className="text-muted-foreground">Tipo de chave Pix</span><p>{savedBanking.pix.type ?? "Não informado"}</p></div>
+                <div><span className="text-muted-foreground">Chave Pix</span><p className="break-all">{savedBanking.pix.key ?? "Não informada"}</p></div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">A leitura dos dados bancários desta oportunidade está indisponível.</p>
+            )}
+          </Card>
         </div>
 
         {/* Sidebar */}
