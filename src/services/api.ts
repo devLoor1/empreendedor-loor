@@ -318,6 +318,13 @@ export async function getDebtSummary(opportunityId: number) {
   return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/debt/summary`);
 }
 
+export async function updateDebtSchedule(opportunityId: number, data: { payment_start_at: string | null }) {
+  return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/debt`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
 export async function payNextInstallment(opportunityId: number) {
   return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/debt/pay-installment`, {
     method: 'POST',
