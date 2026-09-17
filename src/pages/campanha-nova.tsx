@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -533,7 +541,10 @@ function getImageFileSummary(file: File) {
   return `${file.name} · ${formatUploadSize(file.size)}`;
 }
 
-async function uploadCampaignImage(file: File, folder: "opportunities/banner" | "opportunities/extra_images") {
+async function uploadCampaignImage(
+  file: File,
+  folder: "opportunities/banner" | "opportunities/extra_images",
+) {
   const formData = new FormData();
   formData.append("image", normalizeUploadFilename(file));
   formData.append("folder", folder);
@@ -625,13 +636,10 @@ function getDraftValidation(
     toPositiveDecimal(draft.equityPercentage) <= 100;
 
   const targetValid =
-    target >= 100 &&
-    share >= 100 &&
-    quotaCount > 0 &&
-    quotaCount <= 9999 &&
-    target % share === 0;
+    target >= 100 && share >= 100 && quotaCount > 0 && quotaCount <= 9999 && target % share === 0;
 
-  const selectedCountry = countries.find((country) => String(country.id) === draft.countryId) ?? null;
+  const selectedCountry =
+    countries.find((country) => String(country.id) === draft.countryId) ?? null;
   const brazilSelected = isBrazilCountry(selectedCountry);
   const operationsValid =
     Boolean(draft.countryId) &&
@@ -690,7 +698,9 @@ function canEnterWizardStep(step: WizardStep, validation: WizardValidation) {
 function getBlockingStepFor(step: WizardStep, validation: WizardValidation) {
   const targetIndex = getStepIndex(step);
 
-  return WIZARD_STEPS.slice(0, targetIndex).find((previous) => !validation[previous.id])?.id ?? null;
+  return (
+    WIZARD_STEPS.slice(0, targetIndex).find((previous) => !validation[previous.id])?.id ?? null
+  );
 }
 
 function getCharacterHint(value: string, minLength: number, maxLength?: number) {
@@ -755,7 +765,7 @@ function getBackendErrorEntries(error: unknown) {
 
 function getFriendlySubmitErrorMessage(field: string, rule: string, fallbackMessage: string) {
   if (rule === "unique" && field === "opportunity.company_cnpj") {
-    return "O CNPJ canônico da empresa já está em outra oportunidade. Não informe outro CNPJ: confirme a oportunidade existente ou solicite a revisão do contrato de criação.";
+    return "O ambiente ainda rejeita mais de uma oportunidade para o mesmo CNPJ canônico. Não tente outro envio antes de verificar o contrato implantado.";
   }
 
   if (rule === "unique" && field === "opportunity.spe_cnpj") {
@@ -848,7 +858,7 @@ function getSubmitErrorMessage(error: unknown) {
     const record = error as Record<string, unknown>;
 
     if (typeof record.message === "string" && record.message.includes("company_cnpj must match")) {
-      return "O CNPJ da oportunidade diverge do CNPJ canônico do Perfil da empresa. Recarregue e revise o perfil antes de tentar novamente.";
+      return "O ambiente rejeitou o CNPJ canônico derivado do Perfil da empresa. Recarregue o perfil e, se persistir, solicite a verificação do contrato implantado.";
     }
     if (typeof record.message === "string" && record.message.trim()) return record.message;
     if (typeof record.error === "string" && record.error.trim()) return record.error;
@@ -915,11 +925,7 @@ function getDocumentHint(value: string, type: DocumentType, label: string) {
   return (
     <FieldHint
       valid={valid}
-      message={
-        valid
-          ? `${label} completo.`
-          : `${label} incompleto: ${digits}/${expected} dígitos.`
-      }
+      message={valid ? `${label} completo.` : `${label} incompleto: ${digits}/${expected} dígitos.`}
     />
   );
 }
@@ -1012,9 +1018,7 @@ function SubmitErrorAlert({
       <AlertTitle>Não foi possível criar a oportunidade</AlertTitle>
       <AlertDescription className="space-y-3">
         <p>
-          {hasItems
-            ? "Revise os campos abaixo antes de tentar novamente."
-            : submitError.message}
+          {hasItems ? "Revise os campos abaixo antes de tentar novamente." : submitError.message}
         </p>
         {hasItems && (
           <ul className="space-y-2">
@@ -1237,7 +1241,9 @@ function BasicsStep({
           <FormField id="segment" label="Segmento">
             <Select value={draft.segment} onValueChange={(segment) => onPatch({ segment })}>
               <SelectTrigger id="segment">
-                <SelectValue placeholder={referencesLoading ? "Carregando..." : "Selecione o segmento"} />
+                <SelectValue
+                  placeholder={referencesLoading ? "Carregando..." : "Selecione o segmento"}
+                />
               </SelectTrigger>
               <SelectContent>
                 {segments.map((segment) => (
@@ -1255,20 +1261,33 @@ function BasicsStep({
 
         <div className="grid gap-4 md:grid-cols-3">
           <FormField id="documentNumber" label="CNPJ da empresa">
-            <div id="documentNumber" className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
-              {companyInformation ? formatCnpj(companyInformation.cnpj) : companyLoading ? "Carregando CNPJ..." : "CNPJ não disponível"}
+            <div
+              id="documentNumber"
+              className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+            >
+              {companyInformation
+                ? formatCnpj(companyInformation.cnpj)
+                : companyLoading
+                  ? "Carregando CNPJ..."
+                  : "CNPJ não disponível"}
             </div>
             <p className="text-xs text-muted-foreground">
-              {companyInformation
-                ? "CNPJ canônico do Perfil da empresa; não é alterado nesta oportunidade."
-                : companyError
-                  ? "Não foi possível ler o CNPJ canônico. Recarregue a página antes de continuar."
-                  : <>Cadastre o CNPJ canônico no <Link className="underline" to="/app/perfil-empresa">Perfil da empresa</Link> antes de criar a oportunidade.</>}
+              {companyInformation ? (
+                "CNPJ canônico do Perfil da empresa; não é alterado nesta oportunidade."
+              ) : companyError ? (
+                "Não foi possível ler o CNPJ canônico. Recarregue a página antes de continuar."
+              ) : (
+                <>
+                  Cadastre o CNPJ canônico no{" "}
+                  <Link className="underline" to="/app/perfil-empresa">
+                    Perfil da empresa
+                  </Link>{" "}
+                  antes de criar a oportunidade.
+                </>
+              )}
             </p>
             {companyCnpjError && (
-              <p className="text-xs leading-relaxed text-destructive">
-                {companyCnpjError.message}
-              </p>
+              <p className="text-xs leading-relaxed text-destructive">{companyCnpjError.message}</p>
             )}
           </FormField>
 
@@ -1421,7 +1440,9 @@ function FinancialStep({
                 id="profitability"
                 inputMode="decimal"
                 value={draft.profitability}
-                onChange={(event) => onPatch({ profitability: formatDecimalInput(event.target.value) })}
+                onChange={(event) =>
+                  onPatch({ profitability: formatDecimalInput(event.target.value) })
+                }
                 placeholder="Ex.: 14,5"
               />
               {draft.profitability.trim() && (
@@ -1466,14 +1487,25 @@ function FinancialStep({
               </Select>
             </FormField>
 
-            <FormField id="paymentStartAt" label="Início dos pagamentos (opcional)" hint="Se não informado, a API define a base do cronograma; consulte a prévia após a criação.">
+            <FormField
+              id="paymentStartAt"
+              label="Início dos pagamentos (opcional)"
+              hint="Se não informado, a API define a base do cronograma; consulte a prévia após a criação."
+            >
               <Input
                 id="paymentStartAt"
                 type="date"
                 value={draft.paymentStartAt}
                 onChange={(event) => onPatch({ paymentStartAt: event.target.value })}
               />
-              {draft.paymentStartAt && <FieldHint valid={isIsoDate(draft.paymentStartAt)} message={isIsoDate(draft.paymentStartAt) ? "Data válida." : "Informe uma data válida."} />}
+              {draft.paymentStartAt && (
+                <FieldHint
+                  valid={isIsoDate(draft.paymentStartAt)}
+                  message={
+                    isIsoDate(draft.paymentStartAt) ? "Data válida." : "Informe uma data válida."
+                  }
+                />
+              )}
             </FormField>
           </div>
         )}
@@ -1488,7 +1520,9 @@ function FinancialStep({
               id="equityPercentage"
               inputMode="decimal"
               value={draft.equityPercentage}
-              onChange={(event) => onPatch({ equityPercentage: formatDecimalInput(event.target.value) })}
+              onChange={(event) =>
+                onPatch({ equityPercentage: formatDecimalInput(event.target.value) })
+              }
               placeholder="Ex.: 12,5"
             />
             {draft.equityPercentage.trim() && (
@@ -1561,7 +1595,9 @@ function TargetStep({
               id="targetAmount"
               inputMode="decimal"
               value={draft.targetAmount}
-              onChange={(event) => onPatch({ targetAmount: formatDecimalInput(event.target.value) })}
+              onChange={(event) =>
+                onPatch({ targetAmount: formatDecimalInput(event.target.value) })
+              }
               placeholder="Ex.: 500000"
             />
             {getMoneyHint(draft.targetAmount, "Meta")}
@@ -1624,10 +1660,13 @@ function OperationsStep({
   onBack: () => void;
   onContinue: () => void;
 }) {
-  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">("idle");
+  const [cepStatus, setCepStatus] = useState<"idle" | "loading" | "found" | "missing" | "error">(
+    "idle",
+  );
   const lastRequestedCepRef = useRef("");
   const draftRef = useRef(draft);
-  const selectedCountry = countries.find((country) => String(country.id) === draft.countryId) ?? null;
+  const selectedCountry =
+    countries.find((country) => String(country.id) === draft.countryId) ?? null;
   const brazilSelected = isBrazilCountry(selectedCountry);
 
   useEffect(() => {
@@ -1726,7 +1765,10 @@ function OperationsStep({
           label="Garantia cadastrada"
           hint="Opcional. A seleção usa os IDs retornados por GET /entrepreneurs/warranties."
         >
-          <Select value={draft.warrantyId || "none"} onValueChange={(value) => onPatch({ warrantyId: value === "none" ? "" : value })}>
+          <Select
+            value={draft.warrantyId || "none"}
+            onValueChange={(value) => onPatch({ warrantyId: value === "none" ? "" : value })}
+          >
             <SelectTrigger id="warrantyId">
               <SelectValue placeholder="Sem garantia vinculada" />
             </SelectTrigger>
@@ -1786,8 +1828,12 @@ function OperationsStep({
                 message={`${onlyDigits(draft.zipCode).length}/8 dígitos. Complete o CEP para buscar o endereço.`}
               />
             )}
-            {brazilSelected && cepStatus === "loading" && <FieldHint valid message="Buscando endereço na BrasilAPI..." />}
-            {brazilSelected && cepStatus === "found" && <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />}
+            {brazilSelected && cepStatus === "loading" && (
+              <FieldHint valid message="Buscando endereço na BrasilAPI..." />
+            )}
+            {brazilSelected && cepStatus === "found" && (
+              <FieldHint valid message="CEP encontrado. Campos vazios foram preenchidos." />
+            )}
             {brazilSelected && cepStatus === "error" && (
               <FieldHint
                 valid={false}
@@ -1855,7 +1901,11 @@ function OperationsStep({
           </FormField>
         </div>
 
-        <FormField id="complement" label="Complemento" hint="Opcional. A cópia nesta oportunidade não altera o endereço do perfil.">
+        <FormField
+          id="complement"
+          label="Complemento"
+          hint="Opcional. A cópia nesta oportunidade não altera o endereço do perfil."
+        >
           <Input
             id="complement"
             value={draft.complement}
@@ -1898,7 +1948,8 @@ function BankingStep({
         </Badge>
         <CardTitle>Conta bancária, Pix e privacidade</CardTitle>
         <CardDescription>
-          Estes dados serão copiados para a oportunidade sem alterar os dados bancários do perfil. Nenhum pagamento ou QR Code é criado aqui.
+          Estes dados serão copiados para a oportunidade sem alterar os dados bancários do perfil.
+          Nenhum pagamento ou QR Code é criado aqui.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -1946,7 +1997,9 @@ function BankingStep({
             />
             {draft.account && (
               <FieldHint
-                valid={onlyDigits(draft.account).length >= 5 && onlyDigits(draft.account).length <= 16}
+                valid={
+                  onlyDigits(draft.account).length >= 5 && onlyDigits(draft.account).length <= 16
+                }
                 message={`${onlyDigits(draft.account).length}/16 dígitos. Mínimo de 5.`}
               />
             )}
@@ -1955,20 +2008,28 @@ function BankingStep({
             <Input
               id="accountDigit"
               value={draft.accountDigit}
-              onChange={(event) => onPatch({ accountDigit: formatAccountDigit(event.target.value) })}
+              onChange={(event) =>
+                onPatch({ accountDigit: formatAccountDigit(event.target.value) })
+              }
               placeholder="0"
               inputMode="numeric"
               maxLength={1}
             />
             {draft.accountDigit && (
-              <FieldHint valid={onlyDigits(draft.accountDigit).length === 1} message="Dígito informado." />
+              <FieldHint
+                valid={onlyDigits(draft.accountDigit).length === 1}
+                message="Dígito informado."
+              />
             )}
           </FormField>
         </div>
 
         <div className="grid gap-4 md:grid-cols-[220px_1fr]">
           <FormField id="pixType" label="Tipo de chave Pix">
-            <Select value={draft.pixType} onValueChange={(pixType) => onPatch({ pixType, pixKey: "" })}>
+            <Select
+              value={draft.pixType}
+              onValueChange={(pixType) => onPatch({ pixType, pixKey: "" })}
+            >
               <SelectTrigger id="pixType">
                 <SelectValue />
               </SelectTrigger>
@@ -1981,7 +2042,11 @@ function BankingStep({
               </SelectContent>
             </Select>
           </FormField>
-          <FormField id="pixKey" label="Chave Pix da oportunidade" hint="Confirme a chave antes de enviar; a cópia não altera a chave do perfil.">
+          <FormField
+            id="pixKey"
+            label="Chave Pix da oportunidade"
+            hint="Confirme a chave antes de enviar; a cópia não altera a chave do perfil."
+          >
             <Input
               id="pixKey"
               value={draft.pixKey}
@@ -2041,7 +2106,9 @@ function BankingStep({
             <Textarea
               id="allowedCpfs"
               value={draft.allowedCpfs}
-              onChange={(event) => onPatch({ allowedCpfs: formatAllowedCpfList(event.target.value) })}
+              onChange={(event) =>
+                onPatch({ allowedCpfs: formatAllowedCpfList(event.target.value) })
+              }
               placeholder="000.000.000-00, 111.111.111-11"
             />
           </FormField>
@@ -2233,7 +2300,10 @@ function MediaStep({
             >
               <Image className="mb-2 h-5 w-5 text-primary" />
               <span>Selecionar imagens extras</span>
-              <span id="extraImageFilesHelp" className="mt-1 text-xs font-normal text-muted-foreground">
+              <span
+                id="extraImageFilesHelp"
+                className="mt-1 text-xs font-normal text-muted-foreground"
+              >
                 Até 3 imagens, PNG/JPG/JPEG, 20 MiB cada. Selecionar novamente substitui a lista.
               </span>
             </Button>
@@ -2258,7 +2328,6 @@ function MediaStep({
               </div>
             )}
           </FormField>
-
         </div>
 
         {!canContinue && (
@@ -2362,7 +2431,10 @@ function ReviewStep({
           <Alert variant="destructive">
             <CircleAlert className="h-4 w-4" />
             <AlertTitle>Leitura da data ainda não confirmada</AlertTitle>
-            <AlertDescription>{createdReadbackError} A oportunidade {createdOpportunityId} já foi criada; não envie novamente.</AlertDescription>
+            <AlertDescription>
+              {createdReadbackError} A oportunidade {createdOpportunityId} já foi criada; não envie
+              novamente.
+            </AlertDescription>
           </Alert>
         )}
 
@@ -2406,7 +2478,14 @@ function ReviewStep({
                     draft.paymentFrequency || "-"
                   }`}
                 />
-                <SummaryItem label="Início dos pagamentos" value={draft.paymentStartAt ? formatDebtSummaryDate(draft.paymentStartAt) : "Não configurado"} />
+                <SummaryItem
+                  label="Início dos pagamentos"
+                  value={
+                    draft.paymentStartAt
+                      ? formatDebtSummaryDate(draft.paymentStartAt)
+                      : "Não configurado"
+                  }
+                />
               </>
             )}
             {draft.modality === "equity" && (
@@ -2436,7 +2515,10 @@ function ReviewStep({
           </SummaryCard>
 
           <SummaryCard title="Mídia" icon={Video}>
-            <SummaryItem label="Descrição curta" value={draft.shortDescription || "Não informado"} />
+            <SummaryItem
+              label="Descrição curta"
+              value={draft.shortDescription || "Não informado"}
+            />
             <SummaryItem
               label="Mídia"
               value={draft.heroImageFile ? getImageFileSummary(draft.heroImageFile) : "Pendente"}
@@ -2483,7 +2565,11 @@ function ReviewStep({
                 ? "Pronto para criar oportunidade persistente."
                 : "Confirme a ação persistente para liberar o envio."}
             </p>
-            <Button type="button" onClick={onSubmit} disabled={!canFinish || submitting || !!createdOpportunityId}>
+            <Button
+              type="button"
+              onClick={onSubmit}
+              disabled={!canFinish || submitting || !!createdOpportunityId}
+            >
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -2619,7 +2705,12 @@ export default function CampaignCreatePage() {
     () => getBlockingPrerequisites(readiness.items),
     [readiness.items],
   );
-  const canStart = !readiness.loading && blockingPrerequisites.length === 0 && !companyLoading && !companyError && !!companyInformation;
+  const canStart =
+    !readiness.loading &&
+    blockingPrerequisites.length === 0 &&
+    !companyLoading &&
+    !companyError &&
+    !!companyInformation;
   const hasBlockingContract = blockingPrerequisites.some((item) => item.status === "blocked");
   const [previewWizard, setPreviewWizard] = useState(false);
   const [currentStep, setCurrentStep] = useState<WizardStep>("modality");
@@ -2651,12 +2742,8 @@ export default function CampaignCreatePage() {
     let active = true;
 
     async function loadReferences() {
-      const [segmentsResult, banksResult, countriesResult, warrantiesResult] = await Promise.allSettled([
-        getSegments(),
-        getBanks(),
-        getCountries(),
-        getWarranties(),
-      ]);
+      const [segmentsResult, banksResult, countriesResult, warrantiesResult] =
+        await Promise.allSettled([getSegments(), getBanks(), getCountries(), getWarranties()]);
 
       if (!active) return;
 
@@ -2705,12 +2792,13 @@ export default function CampaignCreatePage() {
     let active = true;
 
     async function loadProfileCopies() {
-      const [personalResult, addressResult, bankingResult, companyResult] = await Promise.allSettled([
-        getPersonalInformation(),
-        getAddress(),
-        getBankingInformation(),
-        getCompanyInformation(),
-      ]);
+      const [personalResult, addressResult, bankingResult, companyResult] =
+        await Promise.allSettled([
+          getPersonalInformation(),
+          getAddress(),
+          getBankingInformation(),
+          getCompanyInformation(),
+        ]);
       if (!active) return;
 
       const failures = [
@@ -2750,7 +2838,9 @@ export default function CampaignCreatePage() {
     }
 
     void loadProfileCopies();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [banks, referencesLoading]);
 
   const patchDraft = useCallback((patch: Partial<CampaignDraft>) => {
@@ -2765,11 +2855,13 @@ export default function CampaignCreatePage() {
     setPreviewWizard(false);
     setCurrentStep("modality");
     touchedDraftFieldsRef.current.clear();
-    setDraft(mergeOpportunityProfilePrefill(
-      { ...INITIAL_DRAFT, countryId: getCountryValueForReset(countries) },
-      profilePrefillRef.current,
-      touchedDraftFieldsRef.current,
-    ));
+    setDraft(
+      mergeOpportunityProfilePrefill(
+        { ...INITIAL_DRAFT, countryId: getCountryValueForReset(countries) },
+        profilePrefillRef.current,
+        touchedDraftFieldsRef.current,
+      ),
+    );
   };
 
   const goToStep = (step: WizardStep) => {
@@ -2846,7 +2938,9 @@ export default function CampaignCreatePage() {
       if (!latestCompany || !companyInformation || latestCompany.cnpj !== companyInformation.cnpj) {
         setCompanyInformation(latestCompany);
         setCurrentStep("basics");
-        toast.error("O CNPJ canônico mudou ou está indisponível. Revise a etapa básica antes de enviar.");
+        toast.error(
+          "O CNPJ canônico mudou ou está indisponível. Revise a etapa básica antes de enviar.",
+        );
         return;
       }
       const imageId = await uploadCampaignImage(draft.heroImageFile, "opportunities/banner");
@@ -2876,7 +2970,7 @@ export default function CampaignCreatePage() {
         },
         members: [],
         monetary: buildOpportunityMonetaryPayload(draft.targetAmount, draft.shareValue),
-        opportunity: buildOpportunityContentPayload(draft, imageId, latestCompany.cnpj),
+        opportunity: buildOpportunityContentPayload(draft, imageId),
         ...(draft.modality === "debt"
           ? {
               debt: {
@@ -2921,12 +3015,24 @@ export default function CampaignCreatePage() {
         setCreatedOpportunityId(id);
         try {
           const readback = await getOpportunity(id);
-          if (readback?.data?.id !== id ||
-              !opportunityBankingReadbackMatches(payload, readback?.data)) {
-            setCreatedReadbackError("A API não confirmou os dados bancários e Pix salvos nesta oportunidade.");
-          } else if (draft.modality === "debt" &&
-                     (readback?.data?.debt?.payment_start_at ?? null) !== (draft.paymentStartAt || null)) {
-            setCreatedReadbackError("A API não confirmou a data-base solicitada na leitura da oportunidade.");
+          if (
+            readback?.data?.id !== id ||
+            !opportunityBankingReadbackMatches(payload, readback?.data)
+          ) {
+            setCreatedReadbackError(
+              "A API não confirmou os dados bancários e Pix salvos nesta oportunidade.",
+            );
+          } else if (onlyDigits(readback?.data?.company_cnpj) !== onlyDigits(latestCompany.cnpj)) {
+            setCreatedReadbackError(
+              "A API não confirmou o CNPJ canônico da empresa nesta oportunidade.",
+            );
+          } else if (
+            draft.modality === "debt" &&
+            (readback?.data?.debt?.payment_start_at ?? null) !== (draft.paymentStartAt || null)
+          ) {
+            setCreatedReadbackError(
+              "A API não confirmou a data-base solicitada na leitura da oportunidade.",
+            );
           }
         } catch {
           setCreatedReadbackError("A criação foi retornada, mas a leitura da oportunidade falhou.");
@@ -2995,7 +3101,8 @@ export default function CampaignCreatePage() {
               Pré-requisitos
             </CardTitle>
             <CardDescription>
-              A criação real requer perfil pessoal, endereço e CNPJ canônico salvo no Perfil da empresa.
+              A criação real requer perfil pessoal, endereço e CNPJ canônico salvo no Perfil da
+              empresa.
             </CardDescription>
           </div>
           {!canStart && !previewWizard && (
@@ -3014,9 +3121,17 @@ export default function CampaignCreatePage() {
           <CampaignPrerequisiteList items={readiness.items} loading={readiness.loading} />
           {!companyLoading && !companyInformation && (
             <p className="mt-3 text-sm text-destructive">
-              {companyError
-                ? "Não foi possível confirmar o CNPJ canônico. Recarregue a página."
-                : <>CNPJ canônico ausente. Cadastre-o no <Link className="underline" to="/app/perfil-empresa">Perfil da empresa</Link>.</>}
+              {companyError ? (
+                "Não foi possível confirmar o CNPJ canônico. Recarregue a página."
+              ) : (
+                <>
+                  CNPJ canônico ausente. Cadastre-o no{" "}
+                  <Link className="underline" to="/app/perfil-empresa">
+                    Perfil da empresa
+                  </Link>
+                  .
+                </>
+              )}
             </p>
           )}
         </CardContent>
@@ -3036,7 +3151,11 @@ export default function CampaignCreatePage() {
           </Alert>
 
           <Alert variant={profilePrefill.failures.length ? "destructive" : "default"}>
-            {profilePrefill.loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+            {profilePrefill.loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
             <AlertTitle>
               {profilePrefill.loading
                 ? "Consultando perfil"
@@ -3049,10 +3168,16 @@ export default function CampaignCreatePage() {
                 ? "CPF, endereço e dados bancários existentes serão copiados apenas para campos ainda não editados."
                 : "Revise e edite os valores nesta oportunidade. O perfil e seus dados bancários não serão alterados."}
               {profilePrefill.failures.length > 0 && (
-                <p>Não foi possível consultar {profilePrefill.failures.join(", ")}; preencha esses campos manualmente.</p>
+                <p>
+                  Não foi possível consultar {profilePrefill.failures.join(", ")}; preencha esses
+                  campos manualmente.
+                </p>
               )}
               {profilePrefill.bankNeedsSelection && (
-                <p>O banco salvo no perfil não consta do catálogo ativo. Selecione um banco disponível antes de continuar.</p>
+                <p>
+                  O banco salvo no perfil não consta do catálogo ativo. Selecione um banco
+                  disponível antes de continuar.
+                </p>
               )}
             </AlertDescription>
           </Alert>
