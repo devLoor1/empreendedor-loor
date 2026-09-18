@@ -77,6 +77,7 @@ import {
   type OpportunityProfilePrefill,
 } from "@/features/campaign-creation/opportunity-profile-prefill";
 import { opportunityBankingReadbackMatches } from "@/features/campaign-creation/opportunity-banking-readback";
+import { RESOURCE_UTILIZATION_OPTIONS } from "@/features/campaign-creation/resource-utilization";
 import {
   readCompanyInformation,
   type CompanyInformation,
@@ -309,12 +310,6 @@ const PIX_TYPES = [
   { label: "Telefone", value: "phone" },
   { label: "E-mail", value: "email" },
   { label: "Chave aleatória", value: "random" },
-];
-
-const RESOURCE_UTILIZATION_OPTIONS = [
-  { label: "Capital de giro", value: "working_capital" },
-  { label: "Refinanciamento de dívida", value: "debt_refinancing" },
-  { label: "Investimento na oportunidade", value: "investment_in_the_opportunity" },
 ];
 
 const SHORT_DESCRIPTION_MIN_LENGTH = 20;

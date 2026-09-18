@@ -47,6 +47,7 @@ import {
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import { normalizeUploadFilename } from "@/utils/upload-validation";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
+import { resourceUtilizationLabel } from "@/features/campaign-creation/resource-utilization";
 import { readOpportunityBanking } from "@/features/campaign-creation/opportunity-banking-readback";
 import {
   canCreateOpportunityDocument,
@@ -1035,7 +1036,7 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
               <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
                 <CircleDollarSign className="w-4 h-4" /> Destinação dos Recursos
               </h3>
-              <p className="text-sm text-muted-foreground">{opp.resource_utilization}</p>
+              <p className="text-sm text-muted-foreground">{resourceUtilizationLabel(opp.resource_utilization)}</p>
             </Card>
           )}
 
