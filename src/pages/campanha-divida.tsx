@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDebt, getDebtSummary, updateDebtSchedule, payNextInstallment, debtSimulatePayment } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
+import { profitabilityBasisLabel } from "@/features/campaign-creation/opportunity-presentation-alignment";
 import {
   formatDebtSummaryDate,
   isIsoDate,
@@ -543,6 +544,7 @@ export default function CampaignDebtPage() {
               <div><p className="text-muted-foreground">Primeiro vencimento projetado</p><p className="font-medium">{formatDebtSummaryDate(summary.first_due)}</p></div>
             </div>
             <p className="text-xs text-muted-foreground">{summary.total_installments} parcela(s) · {summary.grace_period} mês(es) de carência · {FREQ_MAP[summary.payment_frequency] ?? summary.payment_frequency}</p>
+            <p className="text-xs text-muted-foreground">Base da rentabilidade retornada pela API: {profitabilityBasisLabel(summary.profitability_basis)}</p>
             {summary.parcelas.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

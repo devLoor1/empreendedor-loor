@@ -78,6 +78,7 @@ import {
 } from "@/features/campaign-creation/opportunity-profile-prefill";
 import { opportunityBankingReadbackMatches } from "@/features/campaign-creation/opportunity-banking-readback";
 import { RESOURCE_UTILIZATION_OPTIONS } from "@/features/campaign-creation/resource-utilization";
+import { CREATION_PIX_TYPES, PROFITABILITY_BASES, isProfitabilityBasis, requireProfitabilityBasis, requireCreationPixType, profitabilityBasisLabel } from "@/features/campaign-creation/opportunity-presentation-alignment";
 import {
   readCompanyInformation,
   type CompanyInformation,
@@ -107,6 +108,7 @@ import {
 import {
   createOpportunity,
   getOpportunity,
+  getDebtSummary,
   getBanks,
   getAddress,
   getBankingInformation,
@@ -169,6 +171,7 @@ type CampaignDraft = {
   businessName: string;
   videoUrl: string;
   profitability: string;
+  profitabilityBasis: string;
   installments: string;
   paymentFrequency: string;
   paymentStartAt: string;
@@ -216,6 +219,7 @@ const INITIAL_DRAFT: CampaignDraft = {
   businessName: "",
   videoUrl: "",
   profitability: "",
+  profitabilityBasis: "",
   installments: "",
   paymentFrequency: "",
   paymentStartAt: "",
@@ -304,13 +308,7 @@ const FREQUENCY_OPTIONS = [
   { label: "Única", value: "unica" },
 ];
 
-const PIX_TYPES = [
-  { label: "CPF", value: "cpf" },
-  { label: "CNPJ", value: "cnpj" },
-  { label: "Telefone", value: "phone" },
-  { label: "E-mail", value: "email" },
-  { label: "Chave aleatória", value: "random" },
-];
+const PIX_TYPES = CREATION_PIX_TYPES;
 
 const SHORT_DESCRIPTION_MIN_LENGTH = 20;
 const ABOUT_MIN_LENGTH = 80;
@@ -563,7 +561,6 @@ function isValidPix(type: string, value: string) {
   const key = normalizePixKey(type, value);
 
   if (type === "cpf") return /^\d{11}$/.test(key);
-  if (type === "cnpj") return /^\d{14}$/.test(key);
   if (type === "phone") return /^\+55\d{2}\d{9}$/.test(key);
   if (type === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key);
   if (type === "random") {
@@ -621,6 +618,7 @@ function getDraftValidation(
   const debtValid =
     draft.modality === "debt" &&
     toPositiveDecimal(draft.profitability) > 0 &&
+    isProfitabilityBasis(draft.profitabilityBasis) &&
     Number.parseInt(draft.installments, 10) > 0 &&
     fieldHasText(draft.paymentFrequency) &&
     (!draft.paymentStartAt || isIsoDate(draft.paymentStartAt));
@@ -1430,7 +1428,7 @@ function FinancialStep({
       <CardContent className="space-y-6">
         {draft.modality === "debt" && (
           <div className="grid gap-4 md:grid-cols-3">
-            <FormField id="profitability" label="Rentabilidade visual (%)">
+            <FormField id="profitability" label="Rentabilidade informada (%)">
               <Input
                 id="profitability"
                 inputMode="decimal"
@@ -1452,6 +1450,13 @@ function FinancialStep({
               )}
             </FormField>
 
+            <FormField id="profitabilityBasis" label="Base da rentabilidade">
+              <Select value={draft.profitabilityBasis} onValueChange={(profitabilityBasis) => onPatch({ profitabilityBasis })}>
+                <SelectTrigger id="profitabilityBasis"><SelectValue placeholder="Selecione mensal ou anual" /></SelectTrigger>
+                <SelectContent>{PROFITABILITY_BASES.map((basis) => <SelectItem key={basis.value} value={basis.value}>{basis.label}</SelectItem>)}</SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">Base enviada à API; não altera a frequência de pagamento nem calcula o retorno nesta tela.</p>
+            </FormField>
             <FormField id="installments" label="Parcelas">
               <Input
                 id="installments"
@@ -2469,7 +2474,7 @@ function ReviewStep({
               <>
                 <SummaryItem
                   label="Dívida"
-                  value={`${draft.profitability || "-"}% | ${draft.installments || "-"} parcelas | ${
+                  value={`${draft.profitability || "-"}% · ${profitabilityBasisLabel(draft.profitabilityBasis)} | ${draft.installments || "-"} parcelas | ${
                     draft.paymentFrequency || "-"
                   }`}
                 />
@@ -2970,6 +2975,7 @@ export default function CampaignCreatePage() {
           ? {
               debt: {
                 percentage_profitability: toPositiveDecimal(draft.profitability),
+                profitability_basis: requireProfitabilityBasis(draft.profitabilityBasis),
                 payment_frequency: draft.paymentFrequency,
                 grace_period: 0,
                 payment_start_at: draft.paymentStartAt || null,
@@ -2990,7 +2996,7 @@ export default function CampaignCreatePage() {
           account_digit: onlyDigits(draft.accountDigit),
         },
         pix: {
-          type: draft.pixType,
+          type: requireCreationPixType(draft.pixType),
           key: normalizePixKey(draft.pixType, draft.pixKey),
         },
         allowed_cpfs:
@@ -3028,6 +3034,11 @@ export default function CampaignCreatePage() {
             setCreatedReadbackError(
               "A API não confirmou a data-base solicitada na leitura da oportunidade.",
             );
+          } else if (draft.modality === "debt") {
+            const summary = await getDebtSummary(id);
+            if (summary?.data?.profitability_basis !== draft.profitabilityBasis) {
+              setCreatedReadbackError("A API não confirmou a base mensal/anual solicitada. A Opportunity já foi criada; atualize somente a leitura, não crie outra.");
+            }
           }
         } catch {
           setCreatedReadbackError("A criação foi retornada, mas a leitura da oportunidade falhou.");

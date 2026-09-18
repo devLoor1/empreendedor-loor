@@ -12,6 +12,7 @@ export type DebtSummary = {
   total_installments: number;
   payment_frequency: string;
   percentage_profitability: string | null;
+  profitability_basis: "annual" | "monthly" | null;
   parcelas: DebtSummaryInstallment[];
 };
 
@@ -36,6 +37,7 @@ export function parseDebtSummary(input: unknown): DebtSummary | null {
   if (!Number.isInteger(value.grace_period) || !Number.isInteger(value.total_installments)) return null;
   if (typeof value.payment_frequency !== "string" || !Array.isArray(value.parcelas)) return null;
   if (value.percentage_profitability !== null && typeof value.percentage_profitability !== "string") return null;
+  if (value.profitability_basis != null && value.profitability_basis !== "annual" && value.profitability_basis !== "monthly") return null;
   const parcelas: DebtSummaryInstallment[] = [];
   for (const row of value.parcelas) {
     if (!row || typeof row !== "object" || Array.isArray(row)) return null;
@@ -56,6 +58,7 @@ export function parseDebtSummary(input: unknown): DebtSummary | null {
     total_installments: value.total_installments as number,
     payment_frequency: value.payment_frequency as string,
     percentage_profitability: value.percentage_profitability as string | null,
+    profitability_basis: value.profitability_basis === "annual" || value.profitability_basis === "monthly" ? value.profitability_basis : null,
     parcelas,
   };
 }

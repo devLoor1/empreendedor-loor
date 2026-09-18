@@ -10,6 +10,7 @@ const response = {
   total_installments: 2,
   payment_frequency: "mensal",
   percentage_profitability: "1.25",
+  profitability_basis: "annual",
   parcelas: [
     { installment_number: 1, due_date: "2027-03-01", projected_amount: "1000.05" },
     { installment_number: 2, due_date: "2027-04-01", projected_amount: "1000.05" },
@@ -21,6 +22,9 @@ assert.equal(formatDebtSummaryDate("2027-03-01"), "01/03/2027");
 assert.equal(formatDebtSummaryDate("2027-02-30"), "—");
 assert.deepEqual(parseDebtSummary({ ...response, payment_start_at: null }), { ...response, payment_start_at: null });
 assert.equal(parseDebtSummary({ ...response, base_date: "2026-02-30" }), null);
+assert.equal(parseDebtSummary({ ...response, profitability_basis: "monthly" })?.profitability_basis, "monthly");
+assert.equal(parseDebtSummary({ ...response, profitability_basis: undefined })?.profitability_basis, null);
+assert.equal(parseDebtSummary({ ...response, profitability_basis: "daily" }), null);
 assert.equal(parseDebtSummary({ ...response, parcelas: [{ ...response.parcelas[0], projected_amount: "1,000.05" }] }), null);
 
 const page = readFileSync(new URL("../../pages/campanha-divida.tsx", import.meta.url), "utf8");

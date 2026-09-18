@@ -20,7 +20,7 @@ export type OpportunityProfilePrefill = Partial<{
 
 type PrefillKey = keyof OpportunityProfilePrefill;
 
-const PIX_TYPES = new Set(["cpf", "cnpj", "phone", "email", "random"]);
+const PIX_TYPES = new Set(["cpf", "phone", "email", "random"]);
 const BANK_FIELDS: PrefillKey[] = ["bankName", "agency", "account", "accountDigit"];
 const PIX_FIELDS: PrefillKey[] = ["pixType", "pixKey"];
 
