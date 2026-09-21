@@ -1,4 +1,5 @@
 import { formatCpf, onlyDigits } from "../../utils/br-formatters.ts";
+import { isEntrepreneurNewWritePixType } from "../banking/entrepreneur-pix-policy.ts";
 
 export type OpportunityProfilePrefill = Partial<{
   responsibleCpf: string;
@@ -20,7 +21,6 @@ export type OpportunityProfilePrefill = Partial<{
 
 type PrefillKey = keyof OpportunityProfilePrefill;
 
-const PIX_TYPES = new Set(["cpf", "phone", "email", "random"]);
 const BANK_FIELDS: PrefillKey[] = ["bankName", "agency", "account", "accountDigit"];
 const PIX_FIELDS: PrefillKey[] = ["pixType", "pixKey"];
 
@@ -89,7 +89,7 @@ export function extractOpportunityProfilePrefill(
 
   const pixType = nonempty(pix?.type);
   const pixKey = nonempty(pix?.key);
-  if (PIX_TYPES.has(pixType) && pixKey) {
+  if (isEntrepreneurNewWritePixType(pixType) && pixKey) {
     values.pixType = pixType;
     values.pixKey = pixKey;
   }

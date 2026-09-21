@@ -78,7 +78,17 @@ import {
 } from "@/features/campaign-creation/opportunity-profile-prefill";
 import { opportunityBankingReadbackMatches } from "@/features/campaign-creation/opportunity-banking-readback";
 import { RESOURCE_UTILIZATION_OPTIONS } from "@/features/campaign-creation/resource-utilization";
-import { CREATION_PIX_TYPES, PROFITABILITY_BASES, isProfitabilityBasis, requireProfitabilityBasis, requireCreationPixType, profitabilityBasisLabel } from "@/features/campaign-creation/opportunity-presentation-alignment";
+import {
+  ENTREPRENEUR_NEW_WRITE_PIX_TYPES,
+  isEntrepreneurNewWritePixType,
+  requireEntrepreneurNewWritePixType,
+} from "@/features/banking/entrepreneur-pix-policy";
+import {
+  PROFITABILITY_BASES,
+  isProfitabilityBasis,
+  profitabilityBasisLabel,
+  requireProfitabilityBasis,
+} from "@/features/campaign-creation/opportunity-presentation-alignment";
 import {
   readCompanyInformation,
   type CompanyInformation,
@@ -239,7 +249,7 @@ const INITIAL_DRAFT: CampaignDraft = {
   agency: "",
   account: "",
   accountDigit: "",
-  pixType: "cpf",
+  pixType: "phone",
   pixKey: "",
   privacy: "public",
   allowedCpfs: "",
@@ -308,7 +318,7 @@ const FREQUENCY_OPTIONS = [
   { label: "Única", value: "unica" },
 ];
 
-const PIX_TYPES = CREATION_PIX_TYPES;
+const PIX_TYPES = ENTREPRENEUR_NEW_WRITE_PIX_TYPES;
 
 const SHORT_DESCRIPTION_MIN_LENGTH = 20;
 const ABOUT_MIN_LENGTH = 80;
@@ -558,9 +568,10 @@ function normalizePixKey(type: string, value: string) {
 }
 
 function isValidPix(type: string, value: string) {
+  if (!isEntrepreneurNewWritePixType(type)) return false;
+
   const key = normalizePixKey(type, value);
 
-  if (type === "cpf") return /^\d{11}$/.test(key);
   if (type === "phone") return /^\+55\d{2}\d{9}$/.test(key);
   if (type === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(key);
   if (type === "random") {
@@ -941,8 +952,6 @@ function getMoneyHint(value: string, label: string, minValue = 100) {
 }
 
 function formatPixDraftValue(type: string, value: string) {
-  if (type === "cpf") return formatCpf(value);
-  if (type === "cnpj") return formatCnpj(value);
   if (type === "phone") {
     const digits = onlyDigits(value);
     const localDigits = digits.startsWith("55") && digits.length > 11 ? digits.slice(-11) : digits;
@@ -2996,7 +3005,7 @@ export default function CampaignCreatePage() {
           account_digit: onlyDigits(draft.accountDigit),
         },
         pix: {
-          type: requireCreationPixType(draft.pixType),
+          type: requireEntrepreneurNewWritePixType(draft.pixType),
           key: normalizePixKey(draft.pixType, draft.pixKey),
         },
         allowed_cpfs:

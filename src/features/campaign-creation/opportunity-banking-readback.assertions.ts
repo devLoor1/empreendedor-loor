@@ -17,7 +17,7 @@ const profileDefaults = extractOpportunityProfilePrefill(null, null, profile, [8
 const draft = {
   responsibleCpf: "", countryId: "1", zipCode: "", state: "", city: "", district: "",
   street: "", number: "", complement: "",
-  bankName: "", agency: "", account: "", accountDigit: "", pixType: "cpf", pixKey: "",
+  bankName: "", agency: "", account: "", accountDigit: "", pixType: "phone", pixKey: "",
 };
 const seeded = mergeOpportunityProfilePrefill(draft, profileDefaults, new Set());
 check(seeded.bankName === "8" && seeded.account === "123456", "perfil inicia somente novo rascunho bancário");
@@ -28,7 +28,7 @@ const edited = mergeOpportunityProfilePrefill(
   new Set(["account", "pixKey"]),
 );
 check(edited.bankName === "" && edited.account === "999", "resposta tardia não mistura nem sobrescreve banco editado");
-check(edited.pixType === "cpf" && edited.pixKey === "manual@example.test", "resposta tardia não sobrescreve Pix editado");
+check(edited.pixType === "phone" && edited.pixKey === "manual@example.test", "resposta tardia não sobrescreve Pix editado");
 
 const saved = {
   id: 41,
@@ -41,6 +41,21 @@ check(savedBanking?.pix.type === "random" && savedBanking.pix.key === "saved-opp
 check(readOpportunityBanking(JSON.parse(JSON.stringify(saved)))?.pix.key === "saved-opportunity-key", "nova leitura/reconstrução mantém a cópia salva");
 check(opportunityBankingReadbackMatches(savedBanking!, saved), "readback de create confirma ambos os objetos");
 check(!opportunityBankingReadbackMatches({ ...savedBanking!, pix: { type: "email", key: "perfil@example.test" } }, saved), "valor do perfil não substitui Pix persistido");
+
+const historicalCpf = {
+  ...saved,
+  pix: { type: "cpf", key: "12345678909" },
+};
+const historicalCpfReadback = readOpportunityBanking(historicalCpf);
+check(
+  historicalCpfReadback?.pix.type === "cpf" &&
+    historicalCpfReadback.pix.key === "12345678909",
+  "Opportunity histórica com Pix CPF permanece legível",
+);
+check(
+  opportunityBankingReadbackMatches(historicalCpfReadback!, historicalCpf),
+  "readback histórico com Pix CPF permanece comparável",
+);
 
 const cleared = { bank_account: { bank_id: null, agency: null, account: null, account_digit: null }, pix: { type: null, key: null } };
 assert.deepEqual(readOpportunityBanking(cleared), cleared);

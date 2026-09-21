@@ -72,7 +72,7 @@ const blank = {
   agency: "",
   account: "",
   accountDigit: "",
-  pixType: "cpf",
+  pixType: "phone",
   pixKey: "",
   opportunityName: "Minha oferta",
 };
@@ -118,6 +118,29 @@ check(
   extractOpportunityProfilePrefill(null, { data: null }, {}, []).values.countryId === undefined,
   "perfil incompleto não fabrica país",
 );
+
+for (const [type, key] of [
+  ["cpf", "12345678909"],
+  ["cnpj", "73925184000174"],
+] as const) {
+  const filtered = extractOpportunityProfilePrefill(
+    null,
+    null,
+    {
+      data: {
+        bank_account: banking.data.bank_account,
+        pix: { type, key },
+      },
+    },
+    [8],
+  );
+  check(
+    filtered.values.bankName === "8" &&
+      filtered.values.pixType === undefined &&
+      filtered.values.pixKey === undefined,
+    `Pix histórico ${type.toUpperCase()} não é promovido a nova escrita`,
+  );
+}
 
 const source = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
 check(

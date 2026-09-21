@@ -1,3 +1,5 @@
+import { requireEntrepreneurNewWritePixType } from '@/features/banking/entrepreneur-pix-policy';
+
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (window.location.protocol === 'https:' ? 'https://back.loor.vc/service' : 'http://127.0.0.1:3333');
 
 const TOKEN_KEY = 'entrepreneur_token';
@@ -243,7 +245,22 @@ export async function getBankingInformation() {
   return apiFetch('/entrepreneurs/banking-information');
 }
 
-export async function saveBankingInformation(data: Record<string, unknown>) {
+export type EntrepreneurBankingInformationWritePayload = {
+  bank_account: {
+    bank_id: number;
+    agency: string;
+    account: string;
+    account_digit: string;
+  };
+  pix: {
+    type: string;
+    key: string;
+  };
+};
+
+export async function saveBankingInformation(data: EntrepreneurBankingInformationWritePayload) {
+  requireEntrepreneurNewWritePixType(data.pix.type);
+
   return apiFetch('/entrepreneurs/banking-information', {
     method: 'POST',
     body: JSON.stringify(data),
