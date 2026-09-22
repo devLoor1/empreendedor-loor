@@ -90,6 +90,12 @@ import {
   requireProfitabilityBasis,
 } from "@/features/campaign-creation/opportunity-presentation-alignment";
 import {
+  getOpportunityCreationModalities,
+  isOpportunityCreationModalityAllowed,
+  requireOpportunityCreationModality,
+  type OpportunityCreationModality,
+} from "@/features/campaign-creation/opportunity-modality-policy";
+import {
   readCompanyInformation,
   type CompanyInformation,
 } from "@/features/company-information/company-information";
@@ -131,7 +137,7 @@ import {
 } from "@/services/api";
 import { toast } from "sonner";
 
-type CampaignModality = "debt" | "equity";
+type CampaignModality = OpportunityCreationModality;
 type DocumentType = "cnpj" | "cpf";
 type PrivacyMode = "public" | "private";
 type WizardStep =
@@ -439,7 +445,12 @@ const UF_OPTIONS = [
   "TO",
 ];
 
-const MODALITY_OPTIONS: Array<{
+const ENTREPRENEUR_PLATFORM_SLUG =
+  import.meta.env.VITE_PLATFORM_SLUG?.trim() ||
+  import.meta.env.VITE_API_SLUG?.trim() ||
+  window.location.hostname;
+
+const ALL_MODALITY_OPTIONS: Array<{
   id: CampaignModality;
   title: string;
   badge: string;
@@ -472,6 +483,13 @@ const MODALITY_OPTIONS: Array<{
     icon: BarChart3,
   },
 ];
+
+const NEW_OPPORTUNITY_MODALITIES = getOpportunityCreationModalities(
+  ENTREPRENEUR_PLATFORM_SLUG,
+);
+const MODALITY_OPTIONS = ALL_MODALITY_OPTIONS.filter((option) =>
+  NEW_OPPORTUNITY_MODALITIES.includes(option.id),
+);
 
 const modalityLabel: Record<CampaignModality, string> = {
   debt: "Dívida",
@@ -664,9 +682,13 @@ function getDraftValidation(
     (draft.privacy === "public" || fieldHasText(draft.allowedCpfs, 11));
 
   const mediaValid = draft.heroImageFile !== null;
+  const modalityAllowed = isOpportunityCreationModalityAllowed(
+    draft.modality,
+    ENTREPRENEUR_PLATFORM_SLUG,
+  );
 
   const requiredValid = [
-    draft.modality !== null,
+    modalityAllowed,
     basicsValid,
     debtValid || equityValid,
     targetValid,
@@ -676,7 +698,7 @@ function getDraftValidation(
   ].every(Boolean);
 
   return {
-    modality: draft.modality !== null,
+    modality: modalityAllowed,
     basics: basicsValid,
     financial: debtValid || equityValid,
     target: targetValid,
@@ -2938,6 +2960,11 @@ export default function CampaignCreatePage() {
       return;
     }
 
+    const modality = requireOpportunityCreationModality(
+      draft.modality,
+      ENTREPRENEUR_PLATFORM_SLUG,
+    );
+
     setSubmitting(true);
     setSubmitError(null);
     setCreatedReadbackError(null);
@@ -2965,7 +2992,7 @@ export default function CampaignCreatePage() {
       const brazilSelected = isBrazilCountry(selectedCountry);
       const payload = {
         is_private: draft.privacy === "private",
-        modality: draft.modality,
+        modality,
         warranty: warrantyIds.length > 0,
         address: {
           country_id: toNumericPayloadId(draft.countryId),
@@ -2980,7 +3007,7 @@ export default function CampaignCreatePage() {
         members: [],
         monetary: buildOpportunityMonetaryPayload(draft.targetAmount, draft.shareValue),
         opportunity: buildOpportunityContentPayload(draft, imageId),
-        ...(draft.modality === "debt"
+        ...(modality === "debt"
           ? {
               debt: {
                 percentage_profitability: toPositiveDecimal(draft.profitability),
