@@ -12,7 +12,10 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getDebt, getDebtSummary, updateDebtSchedule, payNextInstallment, debtSimulatePayment } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
-import { profitabilityBasisLabel } from "@/features/campaign-creation/opportunity-presentation-alignment";
+import {
+  formatProfitabilityWithBasis,
+  profitabilityBasisLabel,
+} from "@/features/campaign-creation/opportunity-presentation-alignment";
 import { formatGracePeriod, parseGracePeriod, readGracePeriod, type GracePeriodDetail } from "@/features/campaign-debt/grace-period";
 import {
   formatDebtSummaryDate,
@@ -431,7 +434,7 @@ export default function CampaignDebtPage() {
             <Percent className="w-4 h-4" />
             <span className="text-xs uppercase">Rentabilidade</span>
           </div>
-          <p className="text-xl font-bold text-foreground">{debt.percentageProfitability ?? "—"}% a.a.</p>
+          <p className="text-xl font-bold text-foreground">{formatProfitabilityWithBasis(debt.percentageProfitability, summary?.profitability_basis)}</p>
         </Card>
         <Card className="p-4 border-border/60">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">

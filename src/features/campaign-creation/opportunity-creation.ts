@@ -46,6 +46,25 @@ export function getCountryValueForReset(countries: readonly CountryReference[]) 
   return getBrazilCountryId(countries);
 }
 
+const BRAZILIAN_STATES = new Set([
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+]);
+
+/** Flags a stale country/profile combination without replacing a persisted country silently. */
+export function hasBrazilianAddressCountryMismatch(
+  country: Pick<CountryReference, "name" | "abbreviation"> | null,
+  zipCode: string,
+  state: string,
+) {
+  return Boolean(
+    country &&
+      !isBrazilCountry(country) &&
+      /^\d{5}-?\d{3}$/.test(zipCode.trim()) &&
+      BRAZILIAN_STATES.has(state.trim().toUpperCase()),
+  );
+}
+
 export function filterSearchableOptions(options: readonly SearchableOption[], query: string) {
   const normalizedQuery = normalizeSearchValue(query);
 

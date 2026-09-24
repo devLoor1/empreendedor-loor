@@ -6,6 +6,7 @@ import {
   requireEntrepreneurNewWritePixType,
 } from "../banking/entrepreneur-pix-policy.ts";
 import {
+  formatProfitabilityWithBasis,
   requireProfitabilityBasis,
   profitabilityBasisLabel,
 } from "./opportunity-presentation-alignment.ts";
@@ -48,7 +49,15 @@ check(
   profitabilityBasisLabel("annual") === "Anual" && profitabilityBasisLabel("monthly") === "Mensal",
   "labels",
 );
+check(formatProfitabilityWithBasis("1.00", "monthly") === "1.00% a.m.", "monthly uses a.m. without changing rate");
+check(formatProfitabilityWithBasis("1.00", "annual") === "1.00% a.a.", "annual uses a.a. without changing rate");
+check(
+  formatProfitabilityWithBasis("1.00", null) === "1.00% · base não informada pela API",
+  "missing basis is not assumed annual",
+);
 const source = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
+const detailSource = readFileSync(new URL("../../pages/campanha-detalhe.tsx", import.meta.url), "utf8");
+const debtSource = readFileSync(new URL("../../pages/campanha-divida.tsx", import.meta.url), "utf8");
 const apiSource = readFileSync(new URL("../../services/api.ts", import.meta.url), "utf8");
 const pixValidation = source.slice(
   source.indexOf("function isValidPix("),
@@ -90,4 +99,10 @@ check(
   "override regression retained",
 );
 check(source.includes("grace_period_detail: gracePeriod"), "grace uses Product years/months/days contract");
+check(
+  detailSource.includes("getDebtSummary(Number(id))") &&
+    detailSource.includes("formatProfitabilityWithBasis(opp.debt.percentage_profitability, profitabilityBasis)") &&
+    debtSource.includes("formatProfitabilityWithBasis(debt.percentageProfitability, summary?.profitability_basis)"),
+  "both Entrepreneur detail surfaces use the authoritative summary basis",
+);
 console.log(`opportunity-presentation-alignment: ${count} assertions passed`);

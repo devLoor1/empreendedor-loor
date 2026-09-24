@@ -61,6 +61,7 @@ import {
   buildOpportunityMonetaryPayload,
   getCountryValueForNewDraft,
   getCountryValueForReset,
+  hasBrazilianAddressCountryMismatch,
   isBrazilCountry,
   normalizeSubdivisionForPayload,
   toNumericPayloadId,
@@ -671,9 +672,13 @@ function getDraftValidation(
   const selectedCountry =
     countries.find((country) => String(country.id) === draft.countryId) ?? null;
   const brazilSelected = isBrazilCountry(selectedCountry);
+  const countryMismatch = hasBrazilianAddressCountryMismatch(
+    selectedCountry, draft.zipCode, draft.state,
+  );
   const operationsValid =
     Boolean(draft.countryId) &&
     hasReferenceId(countries, draft.countryId) &&
+    !countryMismatch &&
     (brazilSelected ? isValidCepShape(draft.zipCode) : fieldHasText(draft.zipCode)) &&
     (brazilSelected ? UF_OPTIONS.includes(draft.state) : fieldHasText(draft.state, 2)) &&
     fieldHasText(draft.city, 2) &&
@@ -1717,6 +1722,9 @@ function OperationsStep({
   const selectedCountry =
     countries.find((country) => String(country.id) === draft.countryId) ?? null;
   const brazilSelected = isBrazilCountry(selectedCountry);
+  const countryMismatch = hasBrazilianAddressCountryMismatch(
+    selectedCountry, draft.zipCode, draft.state,
+  );
 
   useEffect(() => {
     draftRef.current = draft;
@@ -1854,6 +1862,12 @@ function OperationsStep({
           />
           {countries.length === 0 && (
             <FieldHint valid={false} message="Aguarde o carregamento dos países." />
+          )}
+          {countryMismatch && (
+            <FieldHint
+              valid={false}
+              message={`O perfil informa ${selectedCountry?.name}, mas o CEP e a UF têm formato brasileiro. Revise o país antes de continuar; o valor salvo no perfil não foi alterado.`}
+            />
           )}
         </FormField>
 

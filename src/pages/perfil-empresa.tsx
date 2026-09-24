@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
 import {
   Select,
   SelectContent,
@@ -18,10 +19,16 @@ import { toast } from "sonner";
 import {
   getAddress,
   getCompanyInformation,
+  getCountries,
   saveAddress,
   saveCompanyInformation,
   validateCompanyInformation,
 } from "@/services/api";
+import {
+  getCountryValueForNewDraft,
+  hasBrazilianAddressCountryMismatch,
+  type CountryReference,
+} from "@/features/campaign-creation/opportunity-creation";
 import {
   COMPANY_STATUS_LABEL,
   EMPTY_COMPANY,
@@ -61,7 +68,7 @@ type CompanyNotice = {
 };
 
 const EMPTY_ADDRESS: AddressForm = {
-  country_id: 1,
+  country_id: 0,
   state: "",
   city: "",
   district: "",
@@ -154,7 +161,7 @@ function getAddressData(response: unknown): Partial<AddressForm> | null {
 
 function toAddressForm(data: Partial<AddressForm>): AddressForm {
   return {
-    country_id: data.country_id ?? 1,
+    country_id: data.country_id ?? 0,
     state: data.state ?? "",
     city: data.city ?? "",
     district: data.district ?? "",
@@ -163,6 +170,17 @@ function toAddressForm(data: Partial<AddressForm>): AddressForm {
     number: data.number ?? "",
     complement: data.complement ?? "",
   };
+}
+
+function readCountries(response: unknown): CountryReference[] {
+  const data = response && typeof response === "object" && "data" in response
+    ? (response as { data: unknown }).data
+    : null;
+  return Array.isArray(data)
+    ? data.filter((item): item is CountryReference =>
+        item !== null && typeof item === "object" &&
+        Number.isInteger(item.id) && item.id > 0 && typeof item.name === "string")
+    : [];
 }
 
 function hasConfirmedAddress(data: Partial<AddressForm> | null): data is Partial<AddressForm> {
@@ -178,6 +196,7 @@ function hasConfirmedAddress(data: Partial<AddressForm> | null): data is Partial
 
 export default function CompanyPage() {
   const [address, setAddress] = useState<AddressForm>(EMPTY_ADDRESS);
+  const [countries, setCountries] = useState<CountryReference[]>([]);
   const [company, setCompany] = useState<CompanyForm>(EMPTY_COMPANY);
   const [persistedCompany, setPersistedCompany] = useState<CompanyInformation | null>(null);
   const [companyLoadError, setCompanyLoadError] = useState(false);
@@ -194,14 +213,31 @@ export default function CompanyPage() {
   const cnpjIsFilled = onlyDigits(company.cnpj).length > 0;
   const cnpjIsValid = isValidCnpj(company.cnpj);
   const companyIsSaved = companyFormMatches(persistedCompany, company);
+  const selectedCountry = countries.find((country) => country.id === address.country_id) ?? null;
+  const countryMismatch = hasBrazilianAddressCountryMismatch(
+    selectedCountry, address.zip_code, address.state,
+  );
 
   useEffect(() => {
-    Promise.allSettled([getAddress(), getCompanyInformation()]).then(([addressResult, companyResult]) => {
+    Promise.allSettled([getAddress(), getCompanyInformation(), getCountries()]).then(([addressResult, companyResult, countriesResult]) => {
+      const loadedCountries = countriesResult.status === "fulfilled"
+        ? readCountries(countriesResult.value)
+        : [];
+      setCountries(loadedCountries);
       if (addressResult.status === "fulfilled") {
         const persistedAddress = getAddressData(addressResult.value);
         if (persistedAddress) {
-          setAddress(toAddressForm(persistedAddress));
+          const nextAddress = toAddressForm(persistedAddress);
+          setAddress({
+            ...nextAddress,
+            country_id: nextAddress.country_id || Number(getCountryValueForNewDraft(loadedCountries)),
+          });
           setSaved(hasConfirmedAddress(persistedAddress));
+        } else {
+          setAddress((current) => ({
+            ...current,
+            country_id: Number(getCountryValueForNewDraft(loadedCountries)),
+          }));
         }
       }
       if (companyResult.status === "fulfilled") {
@@ -369,6 +405,10 @@ export default function CompanyPage() {
     if (!isValidCepShape(address.zip_code) || !address.street_name || !address.city || !address.state) {
       return toast.error("Preencha CEP, logradouro, cidade e estado");
     }
+    if (!selectedCountry) return toast.error("Selecione um país válido antes de salvar o endereço.");
+    if (countryMismatch) {
+      return toast.error("O país cadastrado não combina com o CEP e a UF brasileiros. Revise o país.");
+    }
     setSaving(true);
     try {
       await saveAddress({
@@ -377,9 +417,9 @@ export default function CompanyPage() {
       });
       const persisted = getAddressData(await getAddress());
 
-      if (!hasConfirmedAddress(persisted)) {
+      if (!hasConfirmedAddress(persisted) || persisted.country_id !== address.country_id) {
         throw new Error(
-          "Endereço enviado, mas não foi possível confirmar o salvamento. Recarregue a página e tente novamente.",
+          "Endereço ou país enviado não foi confirmado pela API. Recarregue a página e tente novamente.",
         );
       }
 
@@ -568,6 +608,31 @@ export default function CompanyPage() {
       <Card className="p-6 space-y-5 border-border/60">
         <h2 className="font-semibold text-foreground">Endereço</h2>
         <div className="grid sm:grid-cols-2 gap-4">
+          <Field label="País" className="sm:col-span-2">
+            <SearchableCombobox
+              id="profile-country"
+              value={address.country_id > 0 ? String(address.country_id) : ""}
+              onValueChange={(value) => updAddress({ country_id: Number(value) })}
+              options={countries.map((country) => ({
+                value: String(country.id),
+                label: country.name,
+                keywords: country.abbreviation ?? "",
+              }))}
+              placeholder="Selecione o país"
+              searchPlaceholder="Buscar país..."
+              disabled={countries.length === 0}
+              aria-invalid={!selectedCountry || countryMismatch}
+            />
+            {countries.length === 0 && (
+              <FieldHint valid={false} message="Não foi possível carregar os países. Aguarde ou recarregue a página." />
+            )}
+            {countryMismatch && (
+              <FieldHint
+                valid={false}
+                message={`O perfil informa ${selectedCountry?.name}, mas o CEP e a UF têm formato brasileiro. Confirme o país antes de salvar o endereço ou criar uma oportunidade.`}
+              />
+            )}
+          </Field>
           <Field label="CEP">
             <Input
               value={address.zip_code}
@@ -639,7 +704,7 @@ export default function CompanyPage() {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} size="lg" disabled={saving}>
+        <Button onClick={handleSave} size="lg" disabled={saving || !selectedCountry || countryMismatch}>
           {saving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin mr-2" />

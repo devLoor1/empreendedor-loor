@@ -38,6 +38,7 @@ import {
   deleteOpportunityDocument,
   downloadOpportunityInvestmentContract,
   getOpportunity,
+  getDebtSummary,
   getOpportunityDocuments,
   getOpportunityInvestors,
   replaceOpportunityDocument,
@@ -48,6 +49,10 @@ import { formatBRLFromCents } from "@/utils/br-formatters";
 import { normalizeUploadFilename } from "@/utils/upload-validation";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
 import { formatGracePeriod, readGracePeriod, type GracePeriodDetail } from "@/features/campaign-debt/grace-period";
+import {
+  formatProfitabilityWithBasis,
+  isProfitabilityBasis,
+} from "@/features/campaign-creation/opportunity-presentation-alignment";
 import { resourceUtilizationLabel } from "@/features/campaign-creation/resource-utilization";
 import { readOpportunityBanking } from "@/features/campaign-creation/opportunity-banking-readback";
 import {
@@ -188,6 +193,7 @@ export default function CampaignDetail() {
   const [anonymous, setAnonymous] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [profitabilityBasis, setProfitabilityBasis] = useState<"annual" | "monthly" | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -195,7 +201,12 @@ export default function CampaignDetail() {
       getOpportunity(Number(id)),
       getOpportunityInvestors(Number(id)).catch(() => ({ data: { investors: [], anonymous: 0 } })),
     ])
-      .then(([oppRes, invRes]) => {
+      .then(async ([oppRes, invRes]) => {
+        const summary = oppRes.data?.modality === "debt"
+          ? await getDebtSummary(Number(id)).catch(() => null)
+          : null;
+        const basis = summary?.data?.profitability_basis;
+        setProfitabilityBasis(isProfitabilityBasis(basis) ? basis : null);
         setOpp(oppRes.data);
         setInvestors(invRes?.data?.investors ?? []);
         setAnonymous(invRes?.data?.anonymous ?? 0);
@@ -304,7 +315,7 @@ export default function CampaignDetail() {
 
         <TabsContent value="overview" className="space-y-6 mt-4">
           <OpportunityContentEditor opportunity={opp} onReadback={setOpp} />
-          <OverviewTab opp={opp} />
+          <OverviewTab opp={opp} profitabilityBasis={profitabilityBasis} />
         </TabsContent>
 
         <TabsContent value="investors" className="mt-4">
@@ -317,7 +328,7 @@ export default function CampaignDetail() {
 
         {opp.debt && (
           <TabsContent value="debt" className="mt-4">
-            <DebtTab debt={opp.debt} opportunityId={opp.id} />
+            <DebtTab debt={opp.debt} opportunityId={opp.id} profitabilityBasis={profitabilityBasis} />
           </TabsContent>
         )}
 
@@ -1013,7 +1024,10 @@ function KPI({ icon: Icon, label, value, sub }: { icon: LucideIcon; label: strin
 
 /* ─── Overview Tab ─────────────────────────────────────────────────────────── */
 
-function OverviewTab({ opp }: { opp: OpportunityDetail }) {
+function OverviewTab({ opp, profitabilityBasis }: {
+  opp: OpportunityDetail;
+  profitabilityBasis: "annual" | "monthly" | null;
+}) {
   const savedBanking = readOpportunityBanking(opp);
   return (
     <>
@@ -1131,7 +1145,7 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
             )}
             {opp.modality === "debt" && opp.debt && (
               <>
-                <DetailRow icon={Percent} label="Rentabilidade" value={`${opp.debt.percentage_profitability ?? "—"}% a.a.`} />
+                <DetailRow icon={Percent} label="Rentabilidade" value={formatProfitabilityWithBasis(opp.debt.percentage_profitability, profitabilityBasis)} />
                 <DetailRow icon={Timer} label="Carência cadastrada" value={formatGracePeriod(readGracePeriod(opp.debt.grace_period_detail, opp.debt.grace_period))} />
                 <DetailRow icon={Banknote} label="Parcelas" value={`${opp.debt.total_installments}x`} />
                 <DetailRow icon={Clock} label="Frequência" value={FREQ_MAP[opp.debt.payment_frequency] ?? opp.debt.payment_frequency} />
@@ -1248,7 +1262,11 @@ function InvestorsTab({ investors, anonymous }: { investors: InvestorData[]; ano
 
 /* ─── Debt Tab ─────────────────────────────────────────────────────────────── */
 
-function DebtTab({ debt, opportunityId }: { debt: DebtData; opportunityId: number }) {
+function DebtTab({ debt, opportunityId, profitabilityBasis }: {
+  debt: DebtData;
+  opportunityId: number;
+  profitabilityBasis: "annual" | "monthly" | null;
+}) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1257,7 +1275,7 @@ function DebtTab({ debt, opportunityId }: { debt: DebtData; opportunityId: numbe
             <Percent className="w-4 h-4" />
             <span className="text-xs uppercase">Rentabilidade</span>
           </div>
-          <p className="text-xl font-bold text-foreground">{debt.percentage_profitability ?? "—"}% a.a.</p>
+          <p className="text-xl font-bold text-foreground">{formatProfitabilityWithBasis(debt.percentage_profitability, profitabilityBasis)}</p>
         </Card>
         <Card className="p-4 border-border/60">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">

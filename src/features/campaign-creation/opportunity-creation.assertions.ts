@@ -6,6 +6,7 @@ import {
   getCountryValueForNewDraft,
   getCountryValueForReset,
   getSelectedSearchableOption,
+  hasBrazilianAddressCountryMismatch,
   isBrazilCountry,
   normalizeSubdivisionForPayload,
   toNumericPayloadId,
@@ -23,6 +24,7 @@ const banks: SearchableOption[] = [
   { value: "42", label: "Nubank", keywords: "Nu Pagamentos" },
 ];
 const pageSource = readFileSync(new URL("../../pages/campanha-nova.tsx", import.meta.url), "utf8");
+const profileSource = readFileSync(new URL("../../pages/perfil-empresa.tsx", import.meta.url), "utf8");
 const removedFieldName = ["what", "sapp", "_group"].join("");
 const removedBrandName = ["what", "sapp"].join("");
 let count = 0;
@@ -39,6 +41,30 @@ check(
   "seleção não brasileira existente é preservada",
 );
 check(getCountryValueForReset(countries) === "77", "reset cria novo rascunho com Brasil");
+check(
+  getCountryValueForNewDraft(countries.filter((country) => country.id !== 77)) === "",
+  "sem Brasil no catálogo, o primeiro país não é escolhido implicitamente",
+);
+check(
+  hasBrazilianAddressCountryMismatch(countries[0], "70000-000", "DF") &&
+    !hasBrazilianAddressCountryMismatch(countries[1], "70000-000", "DF") &&
+    !hasBrazilianAddressCountryMismatch(countries[0], "A1B 2C3", "ON"),
+  "país salvo e CEP/UF brasileiros incompatíveis são sinalizados sem alterar o país",
+);
+check(
+  profileSource.includes("getCountries()") &&
+    profileSource.includes("getCountryValueForNewDraft(loadedCountries)") &&
+    profileSource.includes("country_id: nextAddress.country_id ||") &&
+    profileSource.includes('id="profile-country"') &&
+    !profileSource.includes("country_id: 1"),
+  "perfil usa país do catálogo, preserva país salvo e não grava ID 1 como default oculto",
+);
+check(
+  pageSource.includes("!countryMismatch &&") &&
+    pageSource.includes("hasBrazilianAddressCountryMismatch(") &&
+    pageSource.includes("o valor salvo no perfil não foi alterado"),
+  "wizard informa e bloqueia combinação de país/CEP/UF inconsistente",
+);
 check(
   filterSearchableOptions(banks, "nub")
     .map((bank) => bank.value)

@@ -15,3 +15,13 @@ export function profitabilityBasisLabel(value: unknown) {
     PROFITABILITY_BASES.find((item) => item.value === value)?.label ?? "Não informada pela API"
   );
 }
+
+/** Formats the unchanged rate only when the API supplies its authoritative period. */
+export function formatProfitabilityWithBasis(
+  rate: string | number | null | undefined,
+  basis: unknown,
+) {
+  if (rate === null || rate === undefined || rate === "") return "—";
+  const suffix = basis === "monthly" ? "a.m." : basis === "annual" ? "a.a." : null;
+  return suffix ? `${rate}% ${suffix}` : `${rate}% · base não informada pela API`;
+}
