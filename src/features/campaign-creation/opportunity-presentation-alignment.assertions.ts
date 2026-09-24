@@ -89,5 +89,5 @@ check(
   source.includes("mergeOpportunityProfilePrefill(current, values, touchedDraftFieldsRef.current)"),
   "override regression retained",
 );
-check(source.includes("grace_period: 0"), "grace policy not changed");
+check(source.includes("grace_period_detail: gracePeriod"), "grace uses Product years/months/days contract");
 console.log(`opportunity-presentation-alignment: ${count} assertions passed`);

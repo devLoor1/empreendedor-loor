@@ -100,6 +100,7 @@ import {
   type CompanyInformation,
 } from "@/features/company-information/company-information";
 import { formatDebtSummaryDate, isIsoDate } from "@/features/campaign-debt/debt-summary";
+import { formatGracePeriod, parseGracePeriod, readGracePeriod } from "@/features/campaign-debt/grace-period";
 import { getBlockingPrerequisites, useCampaignReadiness } from "@/hooks/use-campaign-readiness";
 import { lookupCep } from "@/utils/brasil-api";
 import {
@@ -191,6 +192,9 @@ type CampaignDraft = {
   installments: string;
   paymentFrequency: string;
   paymentStartAt: string;
+  graceYears: string;
+  graceMonths: string;
+  graceDays: string;
   equityPercentage: string;
   targetAmount: string;
   shareValue: string;
@@ -239,6 +243,9 @@ const INITIAL_DRAFT: CampaignDraft = {
   installments: "",
   paymentFrequency: "",
   paymentStartAt: "",
+  graceYears: "0",
+  graceMonths: "0",
+  graceDays: "0",
   equityPercentage: "",
   targetAmount: "",
   shareValue: "",
@@ -650,6 +657,7 @@ function getDraftValidation(
     isProfitabilityBasis(draft.profitabilityBasis) &&
     Number.parseInt(draft.installments, 10) > 0 &&
     fieldHasText(draft.paymentFrequency) &&
+    parseGracePeriod(draft.graceYears, draft.graceMonths, draft.graceDays) !== null &&
     (!draft.paymentStartAt || isIsoDate(draft.paymentStartAt));
 
   const equityValid =
@@ -1517,6 +1525,16 @@ function FinancialStep({
                 </SelectContent>
               </Select>
             </FormField>
+
+            <div className="space-y-2 md:col-span-3">
+              <p className="text-sm font-medium">Carência da dívida</p>
+              <div className="grid grid-cols-3 gap-3">
+                <FormField id="graceYears" label="Anos"><Input id="graceYears" type="number" min="0" step="1" value={draft.graceYears} onChange={(event) => onPatch({ graceYears: event.target.value })} /></FormField>
+                <FormField id="graceMonths" label="Meses"><Input id="graceMonths" type="number" min="0" step="1" value={draft.graceMonths} onChange={(event) => onPatch({ graceMonths: event.target.value })} /></FormField>
+                <FormField id="graceDays" label="Dias"><Input id="graceDays" type="number" min="0" step="1" value={draft.graceDays} onChange={(event) => onPatch({ graceDays: event.target.value })} /></FormField>
+              </div>
+              {!parseGracePeriod(draft.graceYears, draft.graceMonths, draft.graceDays) && <p role="alert" className="text-xs text-destructive">Informe números inteiros não negativos; 0/0/0 é inválido.</p>}
+            </div>
 
             <FormField
               id="paymentStartAt"
@@ -2517,6 +2535,7 @@ function ReviewStep({
                       : "Não configurado"
                   }
                 />
+                <SummaryItem label="Carência" value={formatGracePeriod(parseGracePeriod(draft.graceYears, draft.graceMonths, draft.graceDays))} />
               </>
             )}
             {draft.modality === "equity" && (
@@ -2964,6 +2983,12 @@ export default function CampaignCreatePage() {
       draft.modality,
       ENTREPRENEUR_PLATFORM_SLUG,
     );
+    const gracePeriod = modality === "debt" ? parseGracePeriod(draft.graceYears, draft.graceMonths, draft.graceDays) : null;
+    if (modality === "debt" && !gracePeriod) {
+      setCurrentStep("financial");
+      toast.error("A carência deve ter ao menos um componente maior que zero.");
+      return;
+    }
 
     setSubmitting(true);
     setSubmitError(null);
@@ -3013,7 +3038,7 @@ export default function CampaignCreatePage() {
                 percentage_profitability: toPositiveDecimal(draft.profitability),
                 profitability_basis: requireProfitabilityBasis(draft.profitabilityBasis),
                 payment_frequency: draft.paymentFrequency,
-                grace_period: 0,
+                grace_period_detail: gracePeriod,
                 payment_start_at: draft.paymentStartAt || null,
                 total_installments: toInteger(draft.installments),
                 single_installment: draft.paymentFrequency === "unica",
@@ -3070,6 +3095,12 @@ export default function CampaignCreatePage() {
             setCreatedReadbackError(
               "A API não confirmou a data-base solicitada na leitura da oportunidade.",
             );
+          } else if (draft.modality === "debt" && !(() => {
+            const requested = parseGracePeriod(draft.graceYears, draft.graceMonths, draft.graceDays);
+            const saved = readGracePeriod(readback?.data?.debt?.grace_period_detail, readback?.data?.debt?.grace_period);
+            return requested && saved && requested.years === saved.years && requested.months === saved.months && requested.days === saved.days;
+          })()) {
+            setCreatedReadbackError("A API não confirmou a carência composta. A Opportunity já foi criada; releia o ID sem criar outra.");
           } else if (draft.modality === "debt") {
             const summary = await getDebtSummary(id);
             if (summary?.data?.profitability_basis !== draft.profitabilityBasis) {

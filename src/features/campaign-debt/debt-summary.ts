@@ -9,6 +9,7 @@ export type DebtSummary = {
   first_due: string;
   payment_start_at: string | null;
   grace_period: number;
+  grace_period_detail?: { years: number; months: number; days: number };
   total_installments: number;
   payment_frequency: string;
   percentage_profitability: string | null;
@@ -35,6 +36,11 @@ export function parseDebtSummary(input: unknown): DebtSummary | null {
   if (!isIsoDate(value.base_date) || !isIsoDate(value.first_due)) return null;
   if (value.payment_start_at !== null && !isIsoDate(value.payment_start_at)) return null;
   if (!Number.isInteger(value.grace_period) || !Number.isInteger(value.total_installments)) return null;
+  const detail = value.grace_period_detail;
+  if (detail !== undefined && (
+    !detail || typeof detail !== "object" || Array.isArray(detail) ||
+    !["years", "months", "days"].every((key) => Number.isSafeInteger((detail as Record<string, unknown>)[key]) && Number((detail as Record<string, unknown>)[key]) >= 0)
+  )) return null;
   if (typeof value.payment_frequency !== "string" || !Array.isArray(value.parcelas)) return null;
   if (value.percentage_profitability !== null && typeof value.percentage_profitability !== "string") return null;
   if (value.profitability_basis != null && value.profitability_basis !== "annual" && value.profitability_basis !== "monthly") return null;
@@ -55,6 +61,7 @@ export function parseDebtSummary(input: unknown): DebtSummary | null {
     first_due: value.first_due,
     payment_start_at: value.payment_start_at as string | null,
     grace_period: value.grace_period as number,
+    ...(detail ? { grace_period_detail: detail as { years: number; months: number; days: number } } : {}),
     total_installments: value.total_installments as number,
     payment_frequency: value.payment_frequency as string,
     percentage_profitability: value.percentage_profitability as string | null,

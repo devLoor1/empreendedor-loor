@@ -335,7 +335,7 @@ export async function getDebtSummary(opportunityId: number) {
   return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/debt/summary`);
 }
 
-export async function updateDebtSchedule(opportunityId: number, data: { payment_start_at: string | null }) {
+export async function updateDebtSchedule(opportunityId: number, data: { payment_start_at?: string | null; grace_period_detail?: { years: number; months: number; days: number } }) {
   return apiFetch(`/entrepreneurs/opportunities/${opportunityId}/debt`, {
     method: 'PATCH',
     body: JSON.stringify(data),

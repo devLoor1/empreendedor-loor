@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { getDebt, getDebtSummary, updateDebtSchedule, payNextInstallment, debtSimulatePayment } from "@/services/api";
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import { profitabilityBasisLabel } from "@/features/campaign-creation/opportunity-presentation-alignment";
+import { formatGracePeriod, parseGracePeriod, readGracePeriod, type GracePeriodDetail } from "@/features/campaign-debt/grace-period";
 import {
   formatDebtSummaryDate,
   isIsoDate,
@@ -82,6 +83,7 @@ type DebtDetail = {
   percentageProfitability: string | null;
   paymentFrequency: string;
   gracePeriod: number | null;
+  grace_period_detail?: GracePeriodDetail;
   paymentStartAt: string | null;
   totalInstallments: number;
   singleInstallment: boolean | null;
@@ -126,6 +128,15 @@ export default function CampaignDebtPage() {
   const [pendingDateReadback, setPendingDateReadback] = useState<string | null | undefined>(undefined);
   const [scheduleError, setScheduleError] = useState("");
   const [scheduleSuccess, setScheduleSuccess] = useState(false);
+  const [graceEditing, setGraceEditing] = useState(false);
+  const [graceYears, setGraceYears] = useState("0");
+  const [graceMonths, setGraceMonths] = useState("0");
+  const [graceDays, setGraceDays] = useState("0");
+  const [graceSaving, setGraceSaving] = useState(false);
+  const graceSavingRef = useRef(false);
+  const [pendingGraceReadback, setPendingGraceReadback] = useState<GracePeriodDetail | null>(null);
+  const [graceError, setGraceError] = useState("");
+  const [graceSuccess, setGraceSuccess] = useState(false);
 
   const reload = useCallback(() => {
     if (!id) return;
@@ -145,7 +156,19 @@ export default function CampaignDebtPage() {
     setPendingDateReadback(undefined);
     setScheduleError("");
     setScheduleSuccess(false);
+    setGraceEditing(false);
+    setPendingGraceReadback(null);
+    setGraceError("");
+    setGraceSuccess(false);
   }, [id]);
+
+  useEffect(() => {
+    if (!debt || graceEditing || pendingGraceReadback) return;
+    const current = readGracePeriod(debt.grace_period_detail, debt.gracePeriod);
+    setGraceYears(String(current?.years ?? 0));
+    setGraceMonths(String(current?.months ?? 0));
+    setGraceDays(String(current?.days ?? 0));
+  }, [debt, graceEditing, pendingGraceReadback]);
 
   useEffect(() => {
     if (!id) return;
@@ -251,6 +274,71 @@ export default function CampaignDebtPage() {
     }
   }
 
+  async function confirmGraceReadback(expected: GracePeriodDetail) {
+    if (!id) return;
+    const [debtResponse, summaryResponse] = await Promise.all([getDebt(Number(id)), getDebtSummary(Number(id))]);
+    const currentDebt = debtResponse?.data as DebtDetail | undefined;
+    const currentSummary = parseDebtSummary(summaryResponse?.data);
+    const saved = readGracePeriod(currentDebt?.grace_period_detail, currentDebt?.gracePeriod);
+    const scheduled = readGracePeriod(currentSummary?.grace_period_detail, currentSummary?.grace_period);
+    const matches = (part: GracePeriodDetail | null) => part?.years === expected.years && part.months === expected.months && part.days === expected.days;
+    if (!currentDebt || !currentSummary || !matches(saved) || !matches(scheduled)) {
+      throw new Error("A carência enviada não foi confirmada no GET da dívida e do cronograma.");
+    }
+    setDebt(currentDebt);
+    setSummary(currentSummary);
+    setPendingGraceReadback(null);
+    setGraceEditing(false);
+    setGraceSuccess(true);
+    setGraceError("");
+  }
+
+  async function saveGracePeriod() {
+    if (!id || !debt || debt.opportunity.status !== "review" || graceSavingRef.current || pendingGraceReadback) return;
+    const next = parseGracePeriod(graceYears, graceMonths, graceDays);
+    if (!next) { setGraceError("Informe inteiros não negativos; 0/0/0 é inválido."); return; }
+    const current = readGracePeriod(debt.grace_period_detail, debt.gracePeriod);
+    if (current && current.years === next.years && current.months === next.months && current.days === next.days) {
+      setGraceEditing(false);
+      setGraceError("");
+      return;
+    }
+    graceSavingRef.current = true;
+    setGraceSaving(true);
+    setGraceError("");
+    setGraceSuccess(false);
+    let patchStarted = false;
+    try {
+      const before = (await getDebt(Number(id)))?.data as DebtDetail | undefined;
+      const beforeGrace = readGracePeriod(before?.grace_period_detail, before?.gracePeriod);
+      if (!before || before.opportunity.status !== "review" || !beforeGrace || !current ||
+          beforeGrace.years !== current.years || beforeGrace.months !== current.months || beforeGrace.days !== current.days) {
+        throw new Error("A carência ou o status mudou no servidor. Atualize a leitura antes de editar.");
+      }
+      patchStarted = true;
+      setPendingGraceReadback(next);
+      await updateDebtSchedule(Number(id), { grace_period_detail: next });
+      await confirmGraceReadback(next);
+    } catch (error) {
+      if (!patchStarted) setPendingGraceReadback(null);
+      setGraceError(patchStarted
+        ? `O PATCH pode ter sido enviado. Confirme somente a leitura antes de repetir. ${debtActionError(error, "")}`
+        : debtActionError(error, "Não foi possível salvar a carência."));
+    } finally {
+      graceSavingRef.current = false;
+      setGraceSaving(false);
+    }
+  }
+
+  async function retryGraceReadback() {
+    if (!pendingGraceReadback || graceSavingRef.current) return;
+    graceSavingRef.current = true;
+    setGraceSaving(true);
+    try { await confirmGraceReadback(pendingGraceReadback); }
+    catch (error) { setGraceError(debtActionError(error, "A leitura ainda não confirmou a carência.")); }
+    finally { graceSavingRef.current = false; setGraceSaving(false); }
+  }
+
   const handleGenerateCharge = async () => {
     if (!id) return;
     setCharging(true);
@@ -351,9 +439,7 @@ export default function CampaignDebtPage() {
             <span className="text-xs uppercase">Frequência</span>
           </div>
           <p className="text-xl font-bold text-foreground">{FREQ_MAP[debt.paymentFrequency] ?? debt.paymentFrequency}</p>
-          {debt.gracePeriod != null && (
-            <p className="text-xs text-muted-foreground">{debt.gracePeriod} meses carência</p>
-          )}
+          <p className="text-xs text-muted-foreground">Carência: {formatGracePeriod(readGracePeriod(debt.grace_period_detail, debt.gracePeriod))}</p>
         </Card>
         <Card className="p-4 border-border/60">
           <div className="flex items-center gap-2 text-success mb-1">
@@ -372,6 +458,36 @@ export default function CampaignDebtPage() {
           <p className="text-xs text-muted-foreground">{formatBRLFromCents(totalRemaining)}</p>
         </Card>
       </div>
+
+      <Card className="p-5 border-border/60 space-y-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-foreground">Carência da dívida</h3>
+            <p className="text-sm text-muted-foreground">{formatGracePeriod(readGracePeriod(debt.grace_period_detail, debt.gracePeriod))}</p>
+          </div>
+          {debt.opportunity.status === "review" && !graceEditing && !pendingGraceReadback && (
+            <Button variant="outline" onClick={() => { setGraceEditing(true); setGraceError(""); setGraceSuccess(false); }}>Editar carência</Button>
+          )}
+        </div>
+        {debt.opportunity.status !== "review" && <p className="text-xs text-muted-foreground">Carência congelada após aprovação; somente leitura.</p>}
+        {graceEditing && !pendingGraceReadback && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
+              <label className="text-sm">Anos<input type="number" min="0" step="1" value={graceYears} onChange={(event) => setGraceYears(event.target.value)} className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3" /></label>
+              <label className="text-sm">Meses<input type="number" min="0" step="1" value={graceMonths} onChange={(event) => setGraceMonths(event.target.value)} className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3" /></label>
+              <label className="text-sm">Dias<input type="number" min="0" step="1" value={graceDays} onChange={(event) => setGraceDays(event.target.value)} className="mt-1 flex h-10 w-full rounded-md border border-input bg-background px-3" /></label>
+            </div>
+            {!parseGracePeriod(graceYears, graceMonths, graceDays) && <p role="alert" className="text-sm text-destructive">0/0/0 é inválido; informe inteiros não negativos.</p>}
+            <div className="flex gap-2">
+              <Button onClick={() => void saveGracePeriod()} disabled={graceSaving || !parseGracePeriod(graceYears, graceMonths, graceDays)}>{graceSaving ? "Salvando..." : "Salvar carência"}</Button>
+              <Button variant="outline" onClick={() => setGraceEditing(false)} disabled={graceSaving}>Cancelar</Button>
+            </div>
+          </div>
+        )}
+        {pendingGraceReadback && <Button variant="outline" onClick={() => void retryGraceReadback()} disabled={graceSaving}>Confirmar leitura sem reenviar PATCH</Button>}
+        {graceError && <p role="alert" className="text-sm text-destructive">{graceError}</p>}
+        {graceSuccess && <p role="status" className="text-sm text-success">Carência confirmada na dívida e no cronograma.</p>}
+      </Card>
 
       {/* Progress */}
       <Card className="p-5 border-border/60">
@@ -543,7 +659,7 @@ export default function CampaignDebtPage() {
               <div><p className="text-muted-foreground">Início configurado</p><p className="font-medium">{summary.payment_start_at ? formatDebtSummaryDate(summary.payment_start_at) : "Não configurado"}</p></div>
               <div><p className="text-muted-foreground">Primeiro vencimento projetado</p><p className="font-medium">{formatDebtSummaryDate(summary.first_due)}</p></div>
             </div>
-            <p className="text-xs text-muted-foreground">{summary.total_installments} parcela(s) · {summary.grace_period} mês(es) de carência · {FREQ_MAP[summary.payment_frequency] ?? summary.payment_frequency}</p>
+            <p className="text-xs text-muted-foreground">{summary.total_installments} parcela(s) · Carência: {formatGracePeriod(readGracePeriod(summary.grace_period_detail, summary.grace_period))} · {FREQ_MAP[summary.payment_frequency] ?? summary.payment_frequency}</p>
             <p className="text-xs text-muted-foreground">Base da rentabilidade retornada pela API: {profitabilityBasisLabel(summary.profitability_basis)}</p>
             {summary.parcelas.length > 0 ? (
               <div className="overflow-x-auto">

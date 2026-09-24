@@ -47,6 +47,7 @@ import {
 import { formatBRLFromCents } from "@/utils/br-formatters";
 import { normalizeUploadFilename } from "@/utils/upload-validation";
 import { formatOpportunityDate, parseOpportunityDate } from "@/features/campaign-creation/opportunity-lifecycle";
+import { formatGracePeriod, readGracePeriod, type GracePeriodDetail } from "@/features/campaign-debt/grace-period";
 import { resourceUtilizationLabel } from "@/features/campaign-creation/resource-utilization";
 import { readOpportunityBanking } from "@/features/campaign-creation/opportunity-banking-readback";
 import {
@@ -105,6 +106,7 @@ type DebtData = {
   percentage_profitability: string | null;
   payment_frequency: string;
   grace_period: number | null;
+  grace_period_detail?: GracePeriodDetail;
   total_installments: number;
   single_installment: boolean | null;
   status: string;
@@ -295,7 +297,7 @@ export default function CampaignDetail() {
         <TabsList className="w-full justify-start">
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="investors">Investidores ({totalInvestors})</TabsTrigger>
-          <TabsTrigger value="documents">Documentos</TabsTrigger>
+          <TabsTrigger value="documents">Documentos Opcionais da Oportunidade</TabsTrigger>
           {opp.debt && <TabsTrigger value="debt">Dívida</TabsTrigger>}
           {opp.equity && <TabsTrigger value="equity">Equity</TabsTrigger>}
         </TabsList>
@@ -780,9 +782,9 @@ function OpportunityDocumentsTab({
   return (
     <Card className="p-5 border-border/60 space-y-5">
       <div>
-        <h3 className="font-semibold text-foreground">Documentos da oportunidade</h3>
+        <h3 className="font-semibold text-foreground">Documentos Opcionais da Oportunidade</h3>
         <p className="text-sm text-muted-foreground">
-          Gerencie apenas os arquivos desta oportunidade. Os documentos cadastrais da empresa permanecem separados no perfil.
+          Anexos complementares não bloqueiam criação, revisão, aprovação ou publicação. Os documentos cadastrais da empresa permanecem separados no perfil.
         </p>
       </div>
 
@@ -1130,7 +1132,7 @@ function OverviewTab({ opp }: { opp: OpportunityDetail }) {
             {opp.modality === "debt" && opp.debt && (
               <>
                 <DetailRow icon={Percent} label="Rentabilidade" value={`${opp.debt.percentage_profitability ?? "—"}% a.a.`} />
-                <DetailRow icon={Timer} label="Carência cadastrada" value={opp.debt.grace_period == null ? "Não informada" : `${opp.debt.grace_period} meses`} />
+                <DetailRow icon={Timer} label="Carência cadastrada" value={formatGracePeriod(readGracePeriod(opp.debt.grace_period_detail, opp.debt.grace_period))} />
                 <DetailRow icon={Banknote} label="Parcelas" value={`${opp.debt.total_installments}x`} />
                 <DetailRow icon={Clock} label="Frequência" value={FREQ_MAP[opp.debt.payment_frequency] ?? opp.debt.payment_frequency} />
               </>
@@ -1263,7 +1265,7 @@ function DebtTab({ debt, opportunityId }: { debt: DebtData; opportunityId: numbe
             <span className="text-xs uppercase">Frequência</span>
           </div>
           <p className="text-xl font-bold text-foreground">{FREQ_MAP[debt.payment_frequency] ?? debt.payment_frequency}</p>
-          {debt.grace_period != null && <p className="text-xs text-muted-foreground">{debt.grace_period} meses de carência</p>}
+          <p className="text-xs text-muted-foreground">Carência: {formatGracePeriod(readGracePeriod(debt.grace_period_detail, debt.grace_period))}</p>
         </Card>
         <Card className="p-4 border-border/60">
           <div className="flex items-center gap-2 text-muted-foreground mb-1">
