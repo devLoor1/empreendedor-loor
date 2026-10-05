@@ -40,7 +40,7 @@ export type OpportunityDocumentReadback =
 
 const TYPE_LABELS: Record<string, string> = {
   investment_contract: "Contrato de investimento",
-  social_contract: "Contrato social",
+  social_contract: "Estatuto e ata de eleição",
   offered_security: "Valor mobiliário ofertado",
   investment_syndicate: "Sindicato de investimento",
   issuance_of_securities: "Emissão de valores mobiliários",

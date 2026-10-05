@@ -65,9 +65,9 @@ const ALLOWED_EXTENSIONS = ["pdf", "png", "jpg", "jpeg", "docx", "xlsx"];
 const DOCUMENTS: DocumentConfig[] = [
   {
     type: "social_contract",
-    name: "Contrato social",
+    name: "Estatuto e ata de eleição",
     category: "Empresa",
-    description: "Contrato ou última alteração consolidada.",
+    description: "Estatuto social consolidado e ata de eleição da diretoria vigente.",
   },
   {
     type: "cnpj_card",
