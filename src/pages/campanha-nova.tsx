@@ -78,7 +78,11 @@ import {
   type OpportunityProfilePrefill,
 } from "@/features/campaign-creation/opportunity-profile-prefill";
 import { opportunityBankingReadbackMatches } from "@/features/campaign-creation/opportunity-banking-readback";
-import { RESOURCE_UTILIZATION_OPTIONS } from "@/features/campaign-creation/resource-utilization";
+import {
+  RESOURCE_UTILIZATION_OPTIONS,
+  parseResourceUtilizationOptions,
+  type ResourceUtilizationOption,
+} from "@/features/campaign-creation/resource-utilization";
 import {
   ENTREPRENEUR_NEW_WRITE_PIX_TYPES,
   isEntrepreneurNewWritePixType,
@@ -134,6 +138,7 @@ import {
   getCountries,
   getPersonalInformation,
   getSegments,
+  getResourceUtilizations,
   getWarranties,
   uploadImage,
 } from "@/services/api";
@@ -1231,6 +1236,7 @@ function BasicsStep({
   companyLoading,
   companyError,
   segments,
+  resourceUtilizationOptions,
   referencesLoading,
   onPatch,
   canContinue,
@@ -1243,6 +1249,8 @@ function BasicsStep({
   companyLoading: boolean;
   companyError: boolean;
   segments: ReferenceOption[];
+  /** Options registered by the platform (defaults while loading). */
+  resourceUtilizationOptions: ResourceUtilizationOption[];
   referencesLoading: boolean;
   onPatch: (patch: Partial<CampaignDraft>) => void;
   canContinue: boolean;
@@ -1292,6 +1300,9 @@ function BasicsStep({
             </Select>
             {!referencesLoading && segments.length === 1 && (
               <FieldHint valid message="Segmento único carregado da API." />
+            )}
+            {!referencesLoading && segments.length === 0 && (
+              <FieldHint valid={false} message="Nenhum segmento cadastrado nesta plataforma. Fale com o administrador." />
             )}
           </FormField>
         </div>
@@ -1365,7 +1376,7 @@ function BasicsStep({
               <SelectValue placeholder="Selecione a finalidade" />
             </SelectTrigger>
             <SelectContent>
-              {RESOURCE_UTILIZATION_OPTIONS.map((option) => (
+              {resourceUtilizationOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -2780,6 +2791,8 @@ export default function CampaignCreatePage() {
   const [currentStep, setCurrentStep] = useState<WizardStep>("modality");
   const [draft, setDraft] = useState<CampaignDraft>(INITIAL_DRAFT);
   const [segments, setSegments] = useState<ReferenceOption[]>([]);
+  const [resourceUtilizationOptions, setResourceUtilizationOptions] =
+    useState<ResourceUtilizationOption[]>(RESOURCE_UTILIZATION_OPTIONS);
   const [banks, setBanks] = useState<ReferenceOption[]>([]);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [warranties, setWarranties] = useState<ReferenceOption[]>([]);
@@ -2806,10 +2819,20 @@ export default function CampaignCreatePage() {
     let active = true;
 
     async function loadReferences() {
-      const [segmentsResult, banksResult, countriesResult, warrantiesResult] =
-        await Promise.allSettled([getSegments(), getBanks(), getCountries(), getWarranties()]);
+      const [segmentsResult, banksResult, countriesResult, warrantiesResult, resourcesResult] =
+        await Promise.allSettled([
+          getSegments(),
+          getBanks(),
+          getCountries(),
+          getWarranties(),
+          getResourceUtilizations(),
+        ]);
 
       if (!active) return;
+
+      if (resourcesResult.status === "fulfilled") {
+        setResourceUtilizationOptions(parseResourceUtilizationOptions(resourcesResult.value));
+      }
 
       if (segmentsResult.status === "fulfilled") {
         setSegments(getDataArray(segmentsResult.value));
@@ -3290,6 +3313,7 @@ export default function CampaignCreatePage() {
               companyLoading={companyLoading}
               companyError={companyError}
               segments={segments}
+              resourceUtilizationOptions={resourceUtilizationOptions}
               referencesLoading={referencesLoading}
               onPatch={patchDraft}
               canContinue={validation.basics}

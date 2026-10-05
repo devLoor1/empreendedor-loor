@@ -279,6 +279,11 @@ export async function getSegments() {
   return apiFetch('/segments');
 }
 
+/** "Uso dos recursos" options registered by the platform (admin → Oportunidades). */
+export async function getResourceUtilizations() {
+  return apiFetch('/resource-utilizations');
+}
+
 // ── Opportunities ─────────────────────────────────────────────────────────────
 
 export async function getActiveOpportunities(page = 1, limit = 15) {

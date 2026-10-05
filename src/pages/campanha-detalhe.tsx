@@ -128,6 +128,7 @@ type OpportunityDetail = {
   description: string;
   about: string;
   resource_utilization: string;
+  resource_utilization_label?: string | null;
   image: string;
   promotional_video_url: string | null;
   whatsapp_group: string | null;
@@ -1052,7 +1053,7 @@ function OverviewTab({ opp, profitabilityBasis }: {
               <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
                 <CircleDollarSign className="w-4 h-4" /> Destinação dos Recursos
               </h3>
-              <p className="text-sm text-muted-foreground">{resourceUtilizationLabel(opp.resource_utilization)}</p>
+              <p className="text-sm text-muted-foreground">{resourceUtilizationLabel(opp.resource_utilization, undefined, opp.resource_utilization_label)}</p>
             </Card>
           )}
 
