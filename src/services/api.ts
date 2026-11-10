@@ -57,17 +57,24 @@ function buildApiError(status: number, body: unknown) {
   return { status, message: DEFAULT_API_ERROR_MESSAGE };
 }
 
-async function handleApiResponse(res: Response) {
+async function handleApiResponse(res: Response, expectedStatus?: number) {
   const body = await parseResponseBody(res);
 
   if (!res.ok) {
     throw buildApiError(res.status, body);
   }
 
+  if (expectedStatus !== undefined && res.status !== expectedStatus) {
+    throw buildApiError(res.status, {
+      message:
+        "O servidor não confirmou a solicitação de envio. Aguarde antes de tentar novamente.",
+    });
+  }
+
   return body;
 }
 
-async function apiFetch(path: string, options: RequestInit = {}) {
+async function apiFetch(path: string, options: RequestInit = {}, expectedStatus?: number) {
   const token = getToken();
   const slug = import.meta.env.VITE_API_SLUG;
   
@@ -103,7 +110,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     body,
   });
 
-  return handleApiResponse(res);
+  return handleApiResponse(res, expectedStatus);
 }
 
 async function apiFormData(path: string, method: 'POST' | 'PUT', formData: FormData) {
@@ -168,6 +175,47 @@ export async function confirmRegister(token: string) {
     method: 'PUT',
     body: JSON.stringify({ token }),
   });
+}
+
+const confirmationRequests = new Map<string, Promise<unknown>>();
+
+export async function requestEmailConfirmation(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    throw {
+      status: 400,
+      message: "Informe um e-mail válido para solicitar a confirmação.",
+    };
+  }
+
+  // Keep the dispatch guard outside the form so navigation/remount cannot send
+  // a second request while the same account's first request is unresolved.
+  // Published sites configure PLATFORM_SLUG; preserve the wrapper's API_SLUG
+  // precedence without changing context resolution for unrelated API calls.
+  const slug = import.meta.env.VITE_API_SLUG || import.meta.env.VITE_PLATFORM_SLUG?.trim() || "";
+  const requestKey = `${API_BASE}|${slug}|${normalizedEmail}`;
+  const pendingRequest = confirmationRequests.get(requestKey);
+  if (pendingRequest) return pendingRequest;
+
+  const request = apiFetch(
+    "/resend-confirmation",
+    {
+      method: "POST",
+      ...(slug ? { headers: { "x-whitelabel-slug": slug } } : {}),
+      body: JSON.stringify({
+        email: normalizedEmail,
+        user_type: "entrepreneur",
+        ...(slug ? { platform_slug: slug } : {}),
+      }),
+    },
+    201,
+  );
+  confirmationRequests.set(requestKey, request);
+  try {
+    return await request;
+  } finally {
+    confirmationRequests.delete(requestKey);
+  }
 }
 
 export async function getMe() {

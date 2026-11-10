@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { MailCheck, Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
 import { appLogoUrl, appLogoAlt } from "@/config/brand";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,13 @@ import { Card } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { login, register, recoverPassword, setToken } from "@/services/api";
+import {
+  login,
+  register,
+  recoverPassword,
+  requestEmailConfirmation,
+  setToken,
+} from "@/services/api";
 
 type View = "tabs" | "forgot";
 type AuthTab = "login" | "register";
@@ -77,9 +83,46 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmation, setConfirmation] = useState<{
+    status: "idle" | "sending" | "requested" | "error";
+    message: string;
+  }>({ status: "idle", message: "" });
+  const confirmationInFlight = useRef(false);
+  const sendingConfirmation = confirmation.status === "sending";
+
+  const onRequestConfirmation = async () => {
+    if (confirmationInFlight.current || loading) return;
+    confirmationInFlight.current = true;
+    setConfirmation({
+      status: "sending",
+      message: "Solicitando o envio da confirmação…",
+    });
+    try {
+      await requestEmailConfirmation(email);
+      setConfirmation({
+        status: "requested",
+        message:
+          "Solicitação de envio recebida. Abra o link no e-mail para confirmar sua conta; depois volte para entrar. Confira também a pasta de spam.",
+      });
+    } catch (err: unknown) {
+      const error = err as { status?: number; message?: string };
+      setConfirmation({
+        status: "error",
+        message:
+          error?.status === 429
+            ? "Limite de solicitações atingido. Aguarde antes de tentar novamente."
+            : error?.status === 400
+              ? "Informe um e-mail válido para solicitar a confirmação."
+              : "Não foi possível confirmar a solicitação de envio. Confira o e-mail e aguarde antes de tentar novamente.",
+      });
+    } finally {
+      confirmationInFlight.current = false;
+    }
+  };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (confirmationInFlight.current) return;
     if (!email || !password) return toast.error("Preencha e-mail e senha");
     setLoading(true);
     try {
@@ -88,10 +131,7 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
       toast.success("Bem-vindo(a)!");
       navigate("/app/dashboard");
     } catch (err: any) {
-      const msg =
-        err?.errors?.[0]?.message ||
-        err?.message ||
-        "E-mail ou senha inválidos";
+      const msg = err?.errors?.[0]?.message || err?.message || "E-mail ou senha inválidos";
       toast.error(msg);
     } finally {
       setLoading(false);
@@ -102,16 +142,62 @@ function LoginForm({ onForgot }: { onForgot: () => void }) {
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="email">E-mail</Label>
-        <Input id="email" type="email" placeholder="voce@startup.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <Input
+          id="email"
+          type="email"
+          placeholder="voce@startup.com"
+          value={email}
+          disabled={sendingConfirmation}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            setConfirmation({ status: "idle", message: "" });
+          }}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="password">Senha</Label>
-        <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <Input
+          id="password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>{loading ? "Entrando..." : "Entrar"}</Button>
-      <button type="button" onClick={onForgot} className="text-sm text-muted-foreground hover:text-primary w-full text-center">
+      <Button type="submit" className="w-full" disabled={loading || sendingConfirmation}>
+        {loading ? "Entrando..." : "Entrar"}
+      </Button>
+      <button
+        type="button"
+        onClick={onForgot}
+        className="text-sm text-muted-foreground hover:text-primary w-full text-center"
+      >
         Esqueci minha senha
       </button>
+      <div className="space-y-2 border-t border-border pt-4">
+        <p className="text-sm text-muted-foreground">
+          Ainda não confirmou seu e-mail? Use o endereço da sua conta acima.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          disabled={loading || sendingConfirmation}
+          onClick={() => {
+            void onRequestConfirmation();
+          }}
+        >
+          {sendingConfirmation ? "Solicitando confirmação…" : "Reenviar confirmação de e-mail"}
+        </Button>
+        {confirmation.message && (
+          <p
+            role={confirmation.status === "error" ? "alert" : "status"}
+            className="text-sm text-muted-foreground"
+          >
+            {confirmation.message}
+          </p>
+        )}
+      </div>
     </form>
   );
 }

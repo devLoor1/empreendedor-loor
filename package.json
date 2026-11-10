@@ -21,6 +21,7 @@
     "test:debt-summary": "node --experimental-strip-types src/features/campaign-debt/debt-summary.assertions.ts",
     "test:payment-start": "node --experimental-strip-types src/features/campaign-debt/payment-start.assertions.ts",
     "test:password-policy": "node --experimental-strip-types src/features/auth/password-policy.assertions.ts",
+    "test:email-confirmation": "node scripts/check-email-confirmation.mjs",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
