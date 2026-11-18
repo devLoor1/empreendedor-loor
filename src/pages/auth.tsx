@@ -29,9 +29,15 @@ export default function AuthPage() {
       <aside className="hidden lg:flex flex-col justify-between p-12 text-primary-foreground relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
         <div className="flex items-center gap-2 text-xl font-semibold">
           {getAppLogoUrl() ? (
-            <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto brightness-0 invert" />
+            <img
+              src={getAppLogoUrl()}
+              alt={appLogoAlt}
+              className="h-10 w-auto max-w-[220px] object-contain"
+            />
           ) : (
-            <span className="font-bold tracking-tight">{getRuntimeBrandName() || "Plataforma"}</span>
+            <span className="text-2xl font-bold tracking-tight">
+              {getRuntimeBrandName() || "Plataforma"}
+            </span>
           )}
         </div>
         <div className="space-y-6 relative z-10">

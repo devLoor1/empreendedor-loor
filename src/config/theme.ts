@@ -1,4 +1,4 @@
-const defaultThemeColor = "#0a871f";
+const defaultThemeColor = "#7c3aed";
 
 function normalizeHexColor(raw?: string): string | null {
   if (!raw) return null;
@@ -80,9 +80,16 @@ export function applyThemeColor(
   root.style.setProperty("--primary-foreground", primaryFg);
   root.style.setProperty("--ring", primary);
 
-  // Accent derived from primary
+  // Accent / muted / secondary stay on the tenant hue — CSS defaults are teal
+  // (hue ~175) and show up as "verde do nada" on tabs and soft surfaces.
   root.style.setProperty("--accent", oklchStr(Math.min(l + 0.36, 0.96), Math.max(c - 0.09, 0.02), h));
   root.style.setProperty("--accent-foreground", oklchStr(Math.max(l - 0.33, 0.15), Math.min(c + 0.02, 0.3), h));
+  root.style.setProperty("--muted", oklchStr(0.965, Math.min(c * 0.08, 0.02), h));
+  root.style.setProperty("--muted-foreground", oklchStr(0.52, Math.min(c * 0.25, 0.04), h));
+  root.style.setProperty("--secondary", oklchStr(0.96, Math.min(c * 0.12, 0.03), h));
+  root.style.setProperty("--secondary-foreground", oklchStr(0.3, Math.min(c * 0.35, 0.05), h));
+  root.style.setProperty("--border", oklchStr(0.92, Math.min(c * 0.1, 0.02), h));
+  root.style.setProperty("--input", oklchStr(0.93, Math.min(c * 0.1, 0.02), h));
 
   // Gradients and shadows
   root.style.setProperty("--gradient-primary", `linear-gradient(135deg, ${primary}, ${primaryGlow})`);

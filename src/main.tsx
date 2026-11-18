@@ -5,17 +5,20 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyThemeColor } from "./config/theme";
 import {
   getBootstrapBranding,
-  getBootstrapHero,
   getTenantName,
   initTenant,
+  tenantRouterBasename,
 } from "./config/tenant";
 import {
   setRuntimeBrandName,
   setRuntimeLogoUrl,
   setSuppressDefaultLogo,
 } from "./config/brand";
-import { applyDocumentFavicon, applyDocumentTitle } from "./config/documentBrand";
-import { tenantRouterBasename } from "./config/tenant";
+import {
+  applyDocumentFavicon,
+  applyDocumentTitle,
+  applyLetterFavicon,
+} from "./config/documentBrand";
 import App from "./App";
 import "./styles.css";
 
@@ -24,8 +27,10 @@ async function boot() {
   try {
     const tenant = await initTenant();
     const branding = getBootstrapBranding();
-    const heroUrl = getBootstrapHero()?.url?.trim() || null;
-    const logoUrl = branding?.logoUrl?.trim() || heroUrl || null;
+    // Only email_branding.logo_url is a real logo. Hero/main_area is a banner —
+    // using it with brightness/invert produced a white rectangle on auth.
+    const logoUrl = branding?.logoUrl?.trim() || null;
+    const primary = branding?.primaryColor?.trim() || "#7c3aed";
     const name = getTenantName();
 
     setRuntimeBrandName(name);
@@ -34,9 +39,10 @@ async function boot() {
       applyDocumentFavicon(logoUrl);
     } else if (tenant.id || tenant.source === "path" || tenant.source === "hostname") {
       setSuppressDefaultLogo(true);
+      applyLetterFavicon(name, primary);
     }
 
-    applyThemeColor(undefined, branding?.primaryColor ?? undefined);
+    applyThemeColor(undefined, primary);
     applyDocumentTitle(`${name} — Empreendedor`);
 
     const queryClient = new QueryClient();
