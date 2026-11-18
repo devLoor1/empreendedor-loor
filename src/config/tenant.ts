@@ -1,6 +1,7 @@
 /**
  * Runtime tenant for shared Entrepreneur builds.
- * Precedence: hostname → /w/{slug} → VITE_API_SLUG / VITE_PLATFORM_SLUG.
+ * Precedence: /w/{slug} (when present) → hostname → VITE_API_SLUG / VITE_PLATFORM_SLUG.
+ * Path wins on shared hosts so PATH demos are not shadowed by the host WL.
  */
 
 export type PlatformBootstrap = {
@@ -180,28 +181,6 @@ export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
   const pathSlug =
     typeof window !== "undefined" ? slugFromPathname(window.location.pathname) : null
 
-  if (hostSlug) {
-    const boot = (await fetchBootstrap(null, signal)) ?? (await fetchPlatformFallback(hostSlug, signal))
-    if (boot?.whitelabel?.slug) {
-      return commitState({
-        slug: boot.whitelabel.slug,
-        name: boot.whitelabel.name,
-        id: boot.whitelabel.id || null,
-        source: "hostname",
-        bootstrap: boot,
-        pathPrefix: "",
-      })
-    }
-    return commitState({
-      slug: hostSlug,
-      name: hostSlug,
-      id: null,
-      source: "hostname",
-      bootstrap: null,
-      pathPrefix: "",
-    })
-  }
-
   if (pathSlug) {
     const boot =
       (await fetchBootstrap(pathSlug, signal)) ?? (await fetchPlatformFallback(pathSlug, signal))
@@ -222,6 +201,28 @@ export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
       source: "path",
       bootstrap: null,
       pathPrefix: `/w/${pathSlug}`,
+    })
+  }
+
+  if (hostSlug) {
+    const boot = (await fetchBootstrap(null, signal)) ?? (await fetchPlatformFallback(hostSlug, signal))
+    if (boot?.whitelabel?.slug) {
+      return commitState({
+        slug: boot.whitelabel.slug,
+        name: boot.whitelabel.name,
+        id: boot.whitelabel.id || null,
+        source: "hostname",
+        bootstrap: boot,
+        pathPrefix: "",
+      })
+    }
+    return commitState({
+      slug: hostSlug,
+      name: hostSlug,
+      id: null,
+      source: "hostname",
+      bootstrap: null,
+      pathPrefix: "",
     })
   }
 
