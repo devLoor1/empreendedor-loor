@@ -29,21 +29,28 @@ async function boot() {
     const tenant = await initTenant();
     const branding = getBootstrapBranding();
     const heroUrl = getBootstrapHero()?.url?.trim() || null;
-    const logoUrl = branding?.logoUrl?.trim() || heroUrl || null;
-    const primary = branding?.primaryColor?.trim() || "#7c3aed";
+    const isPathTenant = tenant.source === "path";
+    const logoUrl =
+      branding?.logoUrl?.trim() || (isPathTenant ? heroUrl : null) || null;
+    const primary = branding?.primaryColor?.trim() || undefined;
     const name = getTenantName();
 
-    setRuntimeBrandName(name);
+    if (isPathTenant) {
+      setRuntimeBrandName(name);
+    }
+
     if (logoUrl) {
       setRuntimeLogoUrl(logoUrl);
       applyDocumentFavicon(logoUrl);
-    } else if (tenant.id || tenant.source === "path" || tenant.source === "hostname") {
+    } else if (isPathTenant) {
       setSuppressDefaultLogo(true);
-      applyLetterFavicon(name, primary);
+      applyLetterFavicon(name, primary || "#7c3aed");
     }
 
     applyThemeColor(undefined, primary);
-    applyDocumentTitle(`${name} — Empreendedor`);
+    if (isPathTenant) {
+      applyDocumentTitle(`${name} — Empreendedor`);
+    }
 
     const queryClient = new QueryClient();
     createRoot(rootEl).render(
