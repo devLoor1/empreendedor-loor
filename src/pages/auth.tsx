@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useRef, useState } from "react";
 import { MailCheck, Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
-import { getAppLogoUrl, appLogoAlt } from "@/config/brand";
+import { getAppLogoUrl, getRuntimeBrandName, appLogoAlt } from "@/config/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,11 @@ export default function AuthPage() {
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <aside className="hidden lg:flex flex-col justify-between p-12 text-primary-foreground relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
         <div className="flex items-center gap-2 text-xl font-semibold">
-          <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto brightness-0 invert" />
+          {getAppLogoUrl() ? (
+            <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto brightness-0 invert" />
+          ) : (
+            <span className="font-bold tracking-tight">{getRuntimeBrandName() || "Plataforma"}</span>
+          )}
         </div>
         <div className="space-y-6 relative z-10">
           <h1 className="text-4xl font-bold leading-tight">A plataforma onde sua startup encontra investidores.</h1>
@@ -39,14 +43,18 @@ export default function AuthPage() {
             <li className="flex items-center gap-3"><TrendingUp className="w-5 h-5" /> Acompanhamento de campanhas em tempo real</li>
           </ul>
         </div>
-        <p className="text-sm text-primary-foreground/70 relative z-10">© {new Date().getFullYear()} Loor Capital — Crowdfunding regulado pela CVM</p>
+        <p className="text-sm text-primary-foreground/70 relative z-10">© {new Date().getFullYear()} {getRuntimeBrandName() || "Plataforma"} — Crowdfunding regulado pela CVM</p>
         <div aria-hidden className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-white/10 blur-3xl" />
         <div aria-hidden className="absolute -top-24 -left-16 w-80 h-80 rounded-full bg-white/10 blur-3xl" />
       </aside>
       <main className="flex items-center justify-center p-6 sm:p-12">
         <Card className="w-full max-w-md p-8 shadow-[var(--shadow-soft)] border-border/60">
           <div className="lg:hidden flex items-center gap-2 text-xl font-semibold text-primary mb-6">
-            <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto" />
+            {getAppLogoUrl() ? (
+              <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto" />
+            ) : (
+              <span className="font-bold tracking-tight">{getRuntimeBrandName() || "Plataforma"}</span>
+            )}
           </div>
 
           {view === "tabs" && (

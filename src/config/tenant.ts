@@ -12,6 +12,11 @@ export type PlatformBootstrap = {
     primaryColor: string | null
     brandPanelTextColor: string | null
   }
+  hero?: {
+    enabled: boolean
+    url: string | null
+    assetRef: string | null
+  }
 }
 
 type TenantState = {
@@ -255,6 +260,16 @@ export function getTenantSlug(): string {
 
 export function getBootstrapBranding(): PlatformBootstrap["branding"] | null {
   return state?.bootstrap?.branding ?? null
+}
+
+export function getBootstrapHero(): PlatformBootstrap["hero"] | null {
+  return state?.bootstrap?.hero ?? null
+}
+
+export function getTenantName(): string {
+  if (state?.name) return state.name
+  if (state?.slug) return state.slug
+  return getTenantSlug()
 }
 
 export function __resetTenantForTests(): void {

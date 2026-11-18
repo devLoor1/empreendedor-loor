@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { logout } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { getAppLogoUrl, appLogoAlt } from "@/config/brand";
+import { getAppLogoUrl, getRuntimeBrandName, appLogoAlt } from "@/config/brand";
 import { EntrepreneurAvatar } from "@/components/entrepreneur-avatar";
 
 const nav = [
@@ -20,6 +20,7 @@ const nav = [
 
 function SidebarLogo({ className }: { className?: string }) {
   const [failed, setFailed] = useState(false);
+  const wordmark = getRuntimeBrandName() || "Plataforma";
 
   if (!getAppLogoUrl() || failed) {
     return (
@@ -29,7 +30,7 @@ function SidebarLogo({ className }: { className?: string }) {
           className,
         )}
       >
-        LOOR
+        {wordmark}
       </span>
     );
   }

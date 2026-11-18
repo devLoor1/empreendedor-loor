@@ -3,18 +3,42 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyThemeColor } from "./config/theme";
-import { getBootstrapBranding, initTenant, tenantRouterBasename } from "./config/tenant";
-import { setRuntimeLogoUrl } from "./config/brand";
+import {
+  getBootstrapBranding,
+  getBootstrapHero,
+  getTenantName,
+  initTenant,
+} from "./config/tenant";
+import {
+  setRuntimeBrandName,
+  setRuntimeLogoUrl,
+  setSuppressDefaultLogo,
+} from "./config/brand";
+import { applyDocumentFavicon, applyDocumentTitle } from "./config/documentBrand";
+import { tenantRouterBasename } from "./config/tenant";
 import App from "./App";
 import "./styles.css";
 
 async function boot() {
   const rootEl = document.getElementById("root")!;
   try {
-    await initTenant();
+    const tenant = await initTenant();
     const branding = getBootstrapBranding();
-    if (branding?.logoUrl) setRuntimeLogoUrl(branding.logoUrl);
+    const heroUrl = getBootstrapHero()?.url?.trim() || null;
+    const logoUrl = branding?.logoUrl?.trim() || heroUrl || null;
+    const name = getTenantName();
+
+    setRuntimeBrandName(name);
+    if (logoUrl) {
+      setRuntimeLogoUrl(logoUrl);
+      applyDocumentFavicon(logoUrl);
+    } else if (tenant.id || tenant.source === "path" || tenant.source === "hostname") {
+      setSuppressDefaultLogo(true);
+    }
+
     applyThemeColor(undefined, branding?.primaryColor ?? undefined);
+    applyDocumentTitle(`${name} — Empreendedor`);
+
     const queryClient = new QueryClient();
     createRoot(rootEl).render(
       <StrictMode>
