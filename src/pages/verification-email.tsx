@@ -4,7 +4,7 @@ import { CircleAlert, CircleCheck, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { appLogoAlt, appLogoUrl } from "@/config/brand";
+import { appLogoAlt, getAppLogoUrl } from "@/config/brand";
 import { isAuthenticated } from "@/hooks/use-auth";
 import { confirmRegister, setToken } from "@/services/api";
 
@@ -138,7 +138,7 @@ export default function VerificationEmailPage() {
     <div className="min-h-screen bg-background px-6 py-10 text-foreground">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
         <Card className="border-border/60 p-8 text-center shadow-[var(--shadow-soft)]">
-          <img src={appLogoUrl} alt={appLogoAlt} className="mx-auto mb-8 h-9 w-auto" />
+          <img src={getAppLogoUrl()} alt={appLogoAlt} className="mx-auto mb-8 h-9 w-auto" />
 
           {state === "loading" && (
             <div className="space-y-4 py-8">

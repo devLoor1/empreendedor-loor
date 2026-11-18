@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { Link } from "react-router-dom";
+import { getTenantSlug } from "@/config/tenant";
 import {
   ArrowLeft,
   ArrowRight,
@@ -458,10 +459,19 @@ const UF_OPTIONS = [
   "TO",
 ];
 
-const ENTREPRENEUR_PLATFORM_SLUG =
-  import.meta.env.VITE_PLATFORM_SLUG?.trim() ||
-  import.meta.env.VITE_API_SLUG?.trim() ||
-  window.location.hostname;
+function resolveEntrepreneurPlatformSlug(): string {
+  try {
+    return getTenantSlug()
+  } catch {
+    return (
+      import.meta.env.VITE_PLATFORM_SLUG?.trim() ||
+      import.meta.env.VITE_API_SLUG?.trim() ||
+      window.location.hostname
+    )
+  }
+}
+
+const ENTREPRENEUR_PLATFORM_SLUG = resolveEntrepreneurPlatformSlug();
 
 const ALL_MODALITY_OPTIONS: Array<{
   id: CampaignModality;

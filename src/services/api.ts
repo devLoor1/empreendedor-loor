@@ -1,6 +1,15 @@
 import { requireEntrepreneurNewWritePixType } from '@/features/banking/entrepreneur-pix-policy';
+import { getTenantSlug } from '@/config/tenant';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || (window.location.protocol === 'https:' ? 'https://back.loor.vc/service' : 'http://127.0.0.1:3333');
+
+function resolvePlatformSlug(): string {
+  try {
+    return getTenantSlug();
+  } catch {
+    return import.meta.env.VITE_API_SLUG || import.meta.env.VITE_PLATFORM_SLUG?.trim() || '';
+  }
+}
 
 const TOKEN_KEY = 'entrepreneur_token';
 const DEFAULT_API_ERROR_MESSAGE = 'Não foi possível concluir a operação. Tente novamente.';
@@ -76,7 +85,7 @@ async function handleApiResponse(res: Response, expectedStatus?: number) {
 
 async function apiFetch(path: string, options: RequestInit = {}, expectedStatus?: number) {
   const token = getToken();
-  const slug = import.meta.env.VITE_API_SLUG;
+  const slug = resolvePlatformSlug();
   
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -115,7 +124,7 @@ async function apiFetch(path: string, options: RequestInit = {}, expectedStatus?
 
 async function apiFormData(path: string, method: 'POST' | 'PUT', formData: FormData) {
   const token = getToken();
-  const slug = import.meta.env.VITE_API_SLUG;
+  const slug = resolvePlatformSlug();
 
   if (slug && !formData.has('platform_slug')) {
     formData.append('platform_slug', slug);
@@ -192,7 +201,7 @@ export async function requestEmailConfirmation(email: string) {
   // a second request while the same account's first request is unresolved.
   // Published sites configure PLATFORM_SLUG; preserve the wrapper's API_SLUG
   // precedence without changing context resolution for unrelated API calls.
-  const slug = import.meta.env.VITE_API_SLUG || import.meta.env.VITE_PLATFORM_SLUG?.trim() || "";
+  const slug = resolvePlatformSlug();
   const requestKey = `${API_BASE}|${slug}|${normalizedEmail}`;
   const pendingRequest = confirmationRequests.get(requestKey);
   if (pendingRequest) return pendingRequest;
@@ -438,7 +447,7 @@ export async function deleteOpportunityDocument(opportunityId: number, documentI
 
 export async function downloadOpportunityInvestmentContract(opportunityId: number, documentId: number) {
   const token = getToken();
-  const slug = import.meta.env.VITE_API_SLUG;
+  const slug = resolvePlatformSlug();
   const headers: Record<string, string> = { Accept: 'application/pdf' };
   if (token) headers.Authorization = `Bearer ${token}`;
   if (slug) headers['x-whitelabel-slug'] = slug;

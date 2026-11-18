@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useRef, useState } from "react";
 import { MailCheck, Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
-import { appLogoUrl, appLogoAlt } from "@/config/brand";
+import { getAppLogoUrl, appLogoAlt } from "@/config/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,7 +28,7 @@ export default function AuthPage() {
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">
       <aside className="hidden lg:flex flex-col justify-between p-12 text-primary-foreground relative overflow-hidden" style={{ background: "var(--gradient-primary)" }}>
         <div className="flex items-center gap-2 text-xl font-semibold">
-          <img src={appLogoUrl} alt={appLogoAlt} className="h-8 w-auto brightness-0 invert" />
+          <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto brightness-0 invert" />
         </div>
         <div className="space-y-6 relative z-10">
           <h1 className="text-4xl font-bold leading-tight">A plataforma onde sua startup encontra investidores.</h1>
@@ -46,7 +46,7 @@ export default function AuthPage() {
       <main className="flex items-center justify-center p-6 sm:p-12">
         <Card className="w-full max-w-md p-8 shadow-[var(--shadow-soft)] border-border/60">
           <div className="lg:hidden flex items-center gap-2 text-xl font-semibold text-primary mb-6">
-            <img src={appLogoUrl} alt={appLogoAlt} className="h-8 w-auto" />
+            <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto" />
           </div>
 
           {view === "tabs" && (

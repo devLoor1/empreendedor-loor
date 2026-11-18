@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { logout } from "@/services/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { appLogoUrl, appLogoAlt } from "@/config/brand";
+import { getAppLogoUrl, appLogoAlt } from "@/config/brand";
 import { EntrepreneurAvatar } from "@/components/entrepreneur-avatar";
 
 const nav = [
@@ -21,7 +21,7 @@ const nav = [
 function SidebarLogo({ className }: { className?: string }) {
   const [failed, setFailed] = useState(false);
 
-  if (!appLogoUrl || failed) {
+  if (!getAppLogoUrl() || failed) {
     return (
       <span
         className={cn(
@@ -36,7 +36,7 @@ function SidebarLogo({ className }: { className?: string }) {
 
   return (
     <img
-      src={appLogoUrl}
+      src={getAppLogoUrl()}
       alt={appLogoAlt}
       className={cn("w-auto object-contain", className)}
       onError={() => setFailed(true)}

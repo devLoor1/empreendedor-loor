@@ -56,14 +56,18 @@ function oklchStr(l: number, c: number, h: number): string {
 export const appThemeColor =
   normalizeHexColor(import.meta.env.VITE_APP_THEME_COLOR) ?? defaultThemeColor;
 
-export function applyThemeColor(root: HTMLElement = document.documentElement) {
-  const rgb = hexToRgb(appThemeColor);
-  const oklch = hexToOklch(appThemeColor);
+export function applyThemeColor(
+  root: HTMLElement = document.documentElement,
+  overrideHex?: string,
+) {
+  const resolved = normalizeHexColor(overrideHex) ?? appThemeColor;
+  const rgb = hexToRgb(resolved);
+  const oklch = hexToOklch(resolved);
   if (!rgb || !oklch) return;
 
   const { l, c, h } = oklch;
 
-  root.style.setProperty("--app-theme-color", appThemeColor);
+  root.style.setProperty("--app-theme-color", resolved);
   root.style.setProperty("--app-theme-rgb", `${rgb.r}, ${rgb.g}, ${rgb.b}`);
 
   // Primary color and variants
