@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyThemeColor } from "./config/theme";
-import { getBootstrapBranding, initTenant } from "./config/tenant";
+import { getBootstrapBranding, initTenant, tenantRouterBasename } from "./config/tenant";
 import { setRuntimeLogoUrl } from "./config/brand";
 import App from "./App";
 import "./styles.css";
@@ -19,7 +19,7 @@ async function boot() {
     createRoot(rootEl).render(
       <StrictMode>
         <QueryClientProvider client={queryClient}>
-          <BrowserRouter>
+          <BrowserRouter basename={tenantRouterBasename()}>
             <App />
           </BrowserRouter>
         </QueryClientProvider>

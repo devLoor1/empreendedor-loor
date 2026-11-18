@@ -1,6 +1,6 @@
 /**
  * Runtime tenant for shared Entrepreneur builds.
- * Order: bootstrap → investor/platform → hostname → VITE_API_SLUG / VITE_PLATFORM_SLUG.
+ * Precedence: hostname → /w/{slug} → VITE_API_SLUG / VITE_PLATFORM_SLUG.
  */
 
 export type PlatformBootstrap = {
@@ -17,8 +17,9 @@ type TenantState = {
   slug: string
   name: string
   id: number | null
-  source: "bootstrap" | "platform" | "hostname" | "vite_fallback"
+  source: "hostname" | "path" | "bootstrap" | "platform" | "vite_fallback"
   bootstrap: PlatformBootstrap | null
+  pathPrefix: string
 }
 
 let state: TenantState | null = null
@@ -35,6 +36,8 @@ const ROLE_SUFFIXES = [
   "admin.localhost",
   "empreendedor.localhost",
 ] as const
+
+const PATH_TENANT_RE = /^\/w\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)(?=\/|$)/i
 
 function apiBase(): string {
   return (
@@ -63,6 +66,27 @@ export function slugFromHostname(hostname: string): string | null {
     return slug.split(".")[0] || null
   }
   return null
+}
+
+export function slugFromPathname(pathname: string): string | null {
+  const match = pathname.trim().match(PATH_TENANT_RE)
+  if (!match?.[1]) return null
+  return match[1].toLowerCase()
+}
+
+export function tenantRouterBasename(
+  pathname = typeof window !== "undefined" ? window.location.pathname : "/",
+): string {
+  const pathSlug = slugFromPathname(pathname)
+  if (pathSlug) return `/w/${pathSlug}`
+  return "/"
+}
+
+export function getTenantPathPrefix(): string {
+  if (state?.pathPrefix) return state.pathPrefix
+  if (typeof window === "undefined") return ""
+  const pathSlug = slugFromPathname(window.location.pathname)
+  return pathSlug ? `/w/${pathSlug}` : ""
 }
 
 function brandingFromPages(pages: Record<string, unknown> | undefined): PlatformBootstrap["branding"] {
@@ -100,16 +124,24 @@ async function fetchJson(path: string, signal?: AbortSignal): Promise<unknown | 
   }
 }
 
-async function resolveFromApis(signal?: AbortSignal): Promise<PlatformBootstrap | null> {
-  const boot = (await fetchJson("/public/platform/bootstrap", signal)) as {
+async function fetchBootstrap(
+  explicitSlug: string | null,
+  signal?: AbortSignal,
+): Promise<PlatformBootstrap | null> {
+  const qs = explicitSlug ? `?slug=${encodeURIComponent(explicitSlug)}` : ""
+  const json = (await fetchJson(`/public/platform/bootstrap${qs}`, signal)) as {
     data?: PlatformBootstrap
   } | null
-  if (boot?.data?.whitelabel?.slug) return boot.data
+  if (json?.data?.whitelabel?.slug) return json.data
+  return null
+}
 
-  const hostSlug =
-    typeof window !== "undefined" ? slugFromHostname(window.location.hostname) : null
-  const path = hostSlug
-    ? `/investor/platform?platform_slug=${encodeURIComponent(hostSlug)}`
+async function fetchPlatformFallback(
+  slugHint: string | null,
+  signal?: AbortSignal,
+): Promise<PlatformBootstrap | null> {
+  const path = slugHint
+    ? `/investor/platform?platform_slug=${encodeURIComponent(slugHint)}`
     : "/investor/platform"
   const platform = (await fetchJson(path, signal)) as { data?: Record<string, unknown> } | null
   const data = platform?.data
@@ -128,36 +160,86 @@ async function resolveFromApis(signal?: AbortSignal): Promise<PlatformBootstrap 
   }
 }
 
+function commitState(
+  partial: Omit<TenantState, "pathPrefix"> & { pathPrefix?: string },
+): TenantState {
+  const fromUrl =
+    typeof window !== "undefined" ? slugFromPathname(window.location.pathname) : null
+  const pathPrefix =
+    partial.pathPrefix ??
+    (fromUrl ? `/w/${fromUrl}` : partial.source === "path" ? `/w/${partial.slug}` : "")
+  state = { ...partial, pathPrefix }
+  return state
+}
+
 export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
   if (state) return state
 
-  const resolved = await resolveFromApis(signal)
-  if (resolved?.whitelabel?.slug) {
-    state = {
-      slug: resolved.whitelabel.slug,
-      name: resolved.whitelabel.name,
-      id: resolved.whitelabel.id || null,
-      source: "bootstrap",
-      bootstrap: resolved,
-    }
-    return state
-  }
-
   const hostSlug =
     typeof window !== "undefined" ? slugFromHostname(window.location.hostname) : null
+  const pathSlug =
+    typeof window !== "undefined" ? slugFromPathname(window.location.pathname) : null
+
   if (hostSlug) {
-    state = { slug: hostSlug, name: hostSlug, id: null, source: "hostname", bootstrap: null }
-    return state
+    const boot = (await fetchBootstrap(null, signal)) ?? (await fetchPlatformFallback(hostSlug, signal))
+    if (boot?.whitelabel?.slug) {
+      return commitState({
+        slug: boot.whitelabel.slug,
+        name: boot.whitelabel.name,
+        id: boot.whitelabel.id || null,
+        source: "hostname",
+        bootstrap: boot,
+        pathPrefix: "",
+      })
+    }
+    return commitState({
+      slug: hostSlug,
+      name: hostSlug,
+      id: null,
+      source: "hostname",
+      bootstrap: null,
+      pathPrefix: "",
+    })
+  }
+
+  if (pathSlug) {
+    const boot =
+      (await fetchBootstrap(pathSlug, signal)) ?? (await fetchPlatformFallback(pathSlug, signal))
+    if (boot?.whitelabel?.slug) {
+      return commitState({
+        slug: boot.whitelabel.slug,
+        name: boot.whitelabel.name,
+        id: boot.whitelabel.id || null,
+        source: "path",
+        bootstrap: boot,
+        pathPrefix: `/w/${pathSlug}`,
+      })
+    }
+    return commitState({
+      slug: pathSlug,
+      name: pathSlug,
+      id: null,
+      source: "path",
+      bootstrap: null,
+      pathPrefix: `/w/${pathSlug}`,
+    })
   }
 
   const fallback = viteFallbackSlug()
   if (fallback) {
-    state = { slug: fallback, name: fallback, id: null, source: "vite_fallback", bootstrap: null }
-    return state
+    const boot = await fetchBootstrap(fallback, signal)
+    return commitState({
+      slug: boot?.whitelabel?.slug ?? fallback,
+      name: boot?.whitelabel?.name ?? fallback,
+      id: boot?.whitelabel?.id || null,
+      source: "vite_fallback",
+      bootstrap: boot,
+      pathPrefix: "",
+    })
   }
 
   throw new Error(
-    "Não foi possível resolver o Whitelabel. Use {slug}.empresa.localhost / .loor.vc ou VITE_API_SLUG.",
+    "Não foi possível resolver o Whitelabel. Use {slug}.empresa.loor.vc, /w/{slug} ou VITE_API_SLUG.",
   )
 }
 
@@ -172,4 +254,8 @@ export function getTenantSlug(): string {
 
 export function getBootstrapBranding(): PlatformBootstrap["branding"] | null {
   return state?.bootstrap?.branding ?? null
+}
+
+export function __resetTenantForTests(): void {
+  state = null
 }
