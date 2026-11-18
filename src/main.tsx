@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyThemeColor } from "./config/theme";
 import {
   getBootstrapBranding,
+  getBootstrapHero,
   getTenantName,
   initTenant,
   tenantRouterBasename,
@@ -27,9 +28,8 @@ async function boot() {
   try {
     const tenant = await initTenant();
     const branding = getBootstrapBranding();
-    // Only email_branding.logo_url is a real logo. Hero/main_area is a banner —
-    // using it with brightness/invert produced a white rectangle on auth.
-    const logoUrl = branding?.logoUrl?.trim() || null;
+    const heroUrl = getBootstrapHero()?.url?.trim() || null;
+    const logoUrl = branding?.logoUrl?.trim() || heroUrl || null;
     const primary = branding?.primaryColor?.trim() || "#7c3aed";
     const name = getTenantName();
 

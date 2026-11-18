@@ -32,7 +32,7 @@ export default function AuthPage() {
             <img
               src={getAppLogoUrl()}
               alt={appLogoAlt}
-              className="h-10 w-auto max-w-[220px] object-contain"
+              className="h-14 w-auto max-w-[260px] object-contain rounded-md bg-white px-2 py-1.5"
             />
           ) : (
             <span className="text-2xl font-bold tracking-tight">
@@ -57,7 +57,11 @@ export default function AuthPage() {
         <Card className="w-full max-w-md p-8 shadow-[var(--shadow-soft)] border-border/60">
           <div className="lg:hidden flex items-center gap-2 text-xl font-semibold text-primary mb-6">
             {getAppLogoUrl() ? (
-              <img src={getAppLogoUrl()} alt={appLogoAlt} className="h-8 w-auto" />
+              <img
+                src={getAppLogoUrl()}
+                alt={appLogoAlt}
+                className="h-10 w-auto max-w-[200px] object-contain rounded-md bg-white px-2 py-1"
+              />
             ) : (
               <span className="font-bold tracking-tight">{getRuntimeBrandName() || "Plataforma"}</span>
             )}
