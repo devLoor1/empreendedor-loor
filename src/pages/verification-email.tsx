@@ -138,7 +138,15 @@ export default function VerificationEmailPage() {
     <div className="min-h-screen bg-background px-6 py-10 text-foreground">
       <div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-md flex-col justify-center">
         <Card className="border-border/60 p-8 text-center shadow-[var(--shadow-soft)]">
-          <img src={getAppLogoUrl()} alt={appLogoAlt} className="mx-auto mb-8 h-9 w-auto" />
+          <img
+            src={getAppLogoUrl()}
+            alt={appLogoAlt}
+            width={160}
+            height={36}
+            decoding="async"
+            fetchPriority="high"
+            className="mx-auto mb-8 h-9 w-auto"
+          />
 
           {state === "loading" && (
             <div className="space-y-4 py-8">

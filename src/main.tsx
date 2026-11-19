@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { applyThemeColor } from "./config/theme";
 import {
   getBootstrapBranding,
-  getBootstrapHero,
   getTenantName,
   initTenant,
+  isBrandedTenantSource,
   tenantRouterBasename,
 } from "./config/tenant";
 import {
@@ -17,8 +17,9 @@ import {
 } from "./config/brand";
 import {
   applyDocumentFavicon,
-  applyDocumentTitle,
+  applyDocumentMetadata,
   applyLetterFavicon,
+  preloadBrandImage,
 } from "./config/documentBrand";
 import App from "./App";
 import "./styles.css";
@@ -28,31 +29,42 @@ async function boot() {
   try {
     const tenant = await initTenant();
     const branding = getBootstrapBranding();
-    const heroUrl = getBootstrapHero()?.url?.trim() || null;
-    const isPathTenant = tenant.source === "path";
-    const logoUrl =
-      branding?.logoUrl?.trim() || (isPathTenant ? heroUrl : null) || null;
+    const branded = isBrandedTenantSource(tenant.source);
+    // Institutional logo only — hero/banner stays for login main area, not navbar.
+    const logoUrl = branding?.logoUrl?.trim() || null;
     const primary = branding?.primaryColor?.trim() || undefined;
-    const name = getTenantName();
+    const name = getTenantName() || tenant.name || tenant.slug;
 
-    if (isPathTenant) {
+    if (branded) {
       setRuntimeBrandName(name);
+      setSuppressDefaultLogo(true);
     }
 
     if (logoUrl) {
       setRuntimeLogoUrl(logoUrl);
+      preloadBrandImage(logoUrl);
       applyDocumentFavicon(logoUrl);
-    } else if (isPathTenant) {
-      setSuppressDefaultLogo(true);
+    } else if (branded) {
       applyLetterFavicon(name, primary || "#7c3aed");
     }
 
     applyThemeColor(undefined, primary);
-    if (isPathTenant) {
-      applyDocumentTitle(`${name} — Empreendedor`);
+    if (name) {
+      applyDocumentMetadata({
+        title: `${name} — Empreendedor`,
+        siteName: name,
+        description: `Painel do empreendedor · ${name}`,
+      });
     }
 
-    const queryClient = new QueryClient();
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60_000,
+          refetchOnWindowFocus: false,
+        },
+      },
+    });
     createRoot(rootEl).render(
       <StrictMode>
         <QueryClientProvider client={queryClient}>

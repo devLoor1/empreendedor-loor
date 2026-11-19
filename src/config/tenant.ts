@@ -29,6 +29,63 @@ type TenantState = {
 }
 
 let state: TenantState | null = null
+let initInflight: Promise<TenantState> | null = null
+
+/** Explicit hostname/path tenants get Whitelabel chrome; vite_fallback keeps shared LOOR. */
+export function isBrandedTenantSource(source: TenantState["source"]): boolean {
+  return source === "path" || source === "hostname"
+}
+
+const BOOTSTRAP_CACHE_TTL_MS = 5 * 60 * 1000
+const BOOTSTRAP_CACHE_PREFIX = "loor:entrepreneur-bootstrap:v1:"
+
+type CachedTenantPayload = {
+  cachedAt: number
+  host: string
+  pathSlug: string
+  tenant: TenantState
+}
+
+function bootstrapCacheKey(host: string, pathSlug: string): string {
+  return `${BOOTSTRAP_CACHE_PREFIX}${host.toLowerCase()}|${pathSlug.toLowerCase()}`
+}
+
+function readBootstrapCache(host: string, pathSlug: string): TenantState | null {
+  if (typeof sessionStorage === "undefined") return null
+  try {
+    const raw = sessionStorage.getItem(bootstrapCacheKey(host, pathSlug))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as CachedTenantPayload
+    if (
+      !parsed?.tenant?.slug ||
+      parsed.host !== host.toLowerCase() ||
+      parsed.pathSlug !== pathSlug.toLowerCase() ||
+      typeof parsed.cachedAt !== "number" ||
+      Date.now() - parsed.cachedAt > BOOTSTRAP_CACHE_TTL_MS
+    ) {
+      sessionStorage.removeItem(bootstrapCacheKey(host, pathSlug))
+      return null
+    }
+    return parsed.tenant
+  } catch {
+    return null
+  }
+}
+
+function writeBootstrapCache(host: string, pathSlug: string, tenant: TenantState): void {
+  if (typeof sessionStorage === "undefined") return
+  try {
+    const payload: CachedTenantPayload = {
+      cachedAt: Date.now(),
+      host: host.toLowerCase(),
+      pathSlug: pathSlug.toLowerCase(),
+      tenant,
+    }
+    sessionStorage.setItem(bootstrapCacheKey(host, pathSlug), JSON.stringify(payload))
+  } catch {
+    // ignore quota
+  }
+}
 
 const ROLE_SUFFIXES = [
   "investor.loor.vc",
@@ -178,63 +235,75 @@ function commitState(
   return state
 }
 
-export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
-  if (state) return state
-
+async function resolveTenant(signal?: AbortSignal): Promise<TenantState> {
+  const host =
+    typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "unknown"
   const hostSlug =
     typeof window !== "undefined" ? slugFromHostname(window.location.hostname) : null
   const pathSlug =
     typeof window !== "undefined" ? slugFromPathname(window.location.pathname) : null
+  const pathKey = pathSlug || ""
+
+  const cached = readBootstrapCache(host, pathKey)
+  if (cached) {
+    state = cached
+    return cached
+  }
 
   if (pathSlug) {
     const boot =
       (await fetchBootstrap(pathSlug, signal)) ?? (await fetchPlatformFallback(pathSlug, signal))
-    if (boot?.whitelabel?.slug) {
-      return commitState({
-        slug: boot.whitelabel.slug,
-        name: boot.whitelabel.name,
-        id: boot.whitelabel.id || null,
-        source: "path",
-        bootstrap: boot,
-        pathPrefix: `/w/${pathSlug}`,
-      })
-    }
-    return commitState({
-      slug: pathSlug,
-      name: pathSlug,
-      id: null,
-      source: "path",
-      bootstrap: null,
-      pathPrefix: `/w/${pathSlug}`,
-    })
+    const next = boot?.whitelabel?.slug
+      ? commitState({
+          slug: boot.whitelabel.slug,
+          name: boot.whitelabel.name,
+          id: boot.whitelabel.id || null,
+          source: "path",
+          bootstrap: boot,
+          pathPrefix: `/w/${pathSlug}`,
+        })
+      : commitState({
+          slug: pathSlug,
+          name: pathSlug,
+          id: null,
+          source: "path",
+          bootstrap: null,
+          pathPrefix: `/w/${pathSlug}`,
+        })
+    writeBootstrapCache(host, pathKey, next)
+    return next
   }
 
   if (hostSlug) {
-    const boot = (await fetchBootstrap(null, signal)) ?? (await fetchPlatformFallback(hostSlug, signal))
-    if (boot?.whitelabel?.slug) {
-      return commitState({
-        slug: boot.whitelabel.slug,
-        name: boot.whitelabel.name,
-        id: boot.whitelabel.id || null,
-        source: "hostname",
-        bootstrap: boot,
-        pathPrefix: "",
-      })
-    }
-    return commitState({
-      slug: hostSlug,
-      name: hostSlug,
-      id: null,
-      source: "hostname",
-      bootstrap: null,
-      pathPrefix: "",
-    })
+    const boot =
+      (await fetchBootstrap(hostSlug, signal)) ??
+      (await fetchBootstrap(null, signal)) ??
+      (await fetchPlatformFallback(hostSlug, signal))
+    const next = boot?.whitelabel?.slug
+      ? commitState({
+          slug: boot.whitelabel.slug,
+          name: boot.whitelabel.name,
+          id: boot.whitelabel.id || null,
+          source: "hostname",
+          bootstrap: boot,
+          pathPrefix: "",
+        })
+      : commitState({
+          slug: hostSlug,
+          name: hostSlug,
+          id: null,
+          source: "hostname",
+          bootstrap: null,
+          pathPrefix: "",
+        })
+    writeBootstrapCache(host, pathKey, next)
+    return next
   }
 
   const fallback = viteFallbackSlug()
   if (fallback) {
     const boot = await fetchBootstrap(fallback, signal)
-    return commitState({
+    const next = commitState({
       slug: boot?.whitelabel?.slug ?? fallback,
       name: boot?.whitelabel?.name ?? fallback,
       id: boot?.whitelabel?.id || null,
@@ -242,11 +311,22 @@ export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
       bootstrap: boot,
       pathPrefix: "",
     })
+    writeBootstrapCache(host, pathKey, next)
+    return next
   }
 
   throw new Error(
     "Não foi possível resolver o Whitelabel. Use {slug}.empresa.loor.vc, /w/{slug} ou VITE_API_SLUG.",
   )
+}
+
+export async function initTenant(signal?: AbortSignal): Promise<TenantState> {
+  if (state) return state
+  if (initInflight) return initInflight
+  initInflight = resolveTenant(signal).finally(() => {
+    initInflight = null
+  })
+  return initInflight
 }
 
 export function getTenantSlug(): string {
@@ -274,4 +354,5 @@ export function getTenantName(): string {
 
 export function __resetTenantForTests(): void {
   state = null
+  initInflight = null
 }

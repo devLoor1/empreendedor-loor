@@ -39,6 +39,10 @@ function SidebarLogo({ className }: { className?: string }) {
     <img
       src={getAppLogoUrl()}
       alt={appLogoAlt}
+      width={160}
+      height={56}
+      decoding="async"
+      fetchPriority="high"
       className={cn("w-auto object-contain", className)}
       onError={() => setFailed(true)}
     />

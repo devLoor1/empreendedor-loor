@@ -24,6 +24,69 @@ export function applyDocumentTitle(title: string | null | undefined) {
   document.title = next;
 }
 
+function setMeta(
+  selector: string,
+  value: string,
+  create?: { name?: string; property?: string },
+) {
+  if (typeof document === "undefined") return;
+  let el = document.querySelector(selector) as HTMLMetaElement | null;
+  if (!el && create) {
+    el = document.createElement("meta");
+    if (create.name) el.setAttribute("name", create.name);
+    if (create.property) el.setAttribute("property", create.property);
+    document.head.appendChild(el);
+  }
+  if (el) el.setAttribute("content", value);
+}
+
+/** Sync tab/PWA/share metadata with the resolved Whitelabel name. */
+export function applyDocumentMetadata(opts: {
+  title: string;
+  siteName: string;
+  description?: string;
+}) {
+  if (typeof document === "undefined") return;
+  const title = opts.title.trim();
+  const siteName = opts.siteName.trim();
+  if (!title || !siteName) return;
+
+  applyDocumentTitle(title);
+
+  setMeta('meta[name="application-name"]', siteName, { name: "application-name" });
+  setMeta('meta[name="apple-mobile-web-app-title"]', siteName, {
+    name: "apple-mobile-web-app-title",
+  });
+  setMeta('meta[property="og:site_name"]', siteName, { property: "og:site_name" });
+  setMeta('meta[property="og:title"]', title, { property: "og:title" });
+  setMeta('meta[name="twitter:title"]', title, { name: "twitter:title" });
+  if (opts.description?.trim()) {
+    setMeta('meta[name="description"]', opts.description.trim());
+  }
+}
+
+/** High-priority warm for above-the-fold brand mark. */
+export function preloadBrandImage(url: string | null | undefined) {
+  const href = url?.trim();
+  if (!href || typeof document === "undefined") return;
+
+  const already = Array.from(document.querySelectorAll('link[rel="preload"][as="image"]')).some(
+    (node) => (node as HTMLLinkElement).href === href || node.getAttribute("href") === href,
+  );
+  if (!already) {
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.href = href;
+    link.setAttribute("fetchpriority", "high");
+    document.head.appendChild(link);
+  }
+
+  const img = new Image();
+  img.decoding = "async";
+  img.src = href;
+}
+
 /** Tiny letter mark when the tenant has no dedicated logo_url (hero banners are not logos). */
 export function applyLetterFavicon(name: string, backgroundHex: string) {
   if (typeof document === "undefined") return;

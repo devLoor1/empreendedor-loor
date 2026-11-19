@@ -32,6 +32,10 @@ export default function AuthPage() {
             <img
               src={getAppLogoUrl()}
               alt={appLogoAlt}
+              width={260}
+              height={56}
+              decoding="async"
+              fetchPriority="high"
               className="h-14 w-auto max-w-[260px] object-contain rounded-md bg-white px-2 py-1.5"
             />
           ) : (
@@ -60,6 +64,10 @@ export default function AuthPage() {
               <img
                 src={getAppLogoUrl()}
                 alt={appLogoAlt}
+                width={200}
+                height={40}
+                decoding="async"
+                fetchPriority="high"
                 className="h-10 w-auto max-w-[200px] object-contain rounded-md bg-white px-2 py-1"
               />
             ) : (
