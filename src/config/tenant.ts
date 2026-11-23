@@ -36,6 +36,30 @@ export function isBrandedTenantSource(source: TenantState["source"]): boolean {
   return source === "path" || source === "hostname"
 }
 
+/**
+ * Platform LOOR / homolog WLs — keep build-time LOOR logo when bootstrap has no logoUrl.
+ * Customer WLs hide the LOOR mark (logo from bootstrap, else wordmark/letter).
+ */
+export function isPlatformLoorSlug(slug: string | null | undefined): boolean {
+  const normalized = String(slug || "").trim().toLowerCase()
+  return (
+    !normalized ||
+    normalized === "homologacao" ||
+    normalized === "homolog" ||
+    normalized === "loor" ||
+    normalized === "loor-homologacao" ||
+    normalized === "default"
+  )
+}
+
+/** Hide build-time LOOR assets only for real customer tenants (not platform homolog). */
+export function shouldHideDefaultLoorChrome(
+  source: TenantState["source"],
+  slug: string | null | undefined,
+): boolean {
+  return isBrandedTenantSource(source) && !isPlatformLoorSlug(slug)
+}
+
 const BOOTSTRAP_CACHE_TTL_MS = 5 * 60 * 1000
 const BOOTSTRAP_CACHE_PREFIX = "loor:entrepreneur-bootstrap:v1:"
 

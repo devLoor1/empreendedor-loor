@@ -7,7 +7,7 @@ import {
   getBootstrapBranding,
   getTenantName,
   initTenant,
-  isBrandedTenantSource,
+  shouldHideDefaultLoorChrome,
   tenantRouterBasename,
 } from "./config/tenant";
 import {
@@ -29,13 +29,13 @@ async function boot() {
   try {
     const tenant = await initTenant();
     const branding = getBootstrapBranding();
-    const branded = isBrandedTenantSource(tenant.source);
+    const hideDefaultLoor = shouldHideDefaultLoorChrome(tenant.source, tenant.slug);
     // Institutional logo only — hero/banner stays for login main area, not navbar.
     const logoUrl = branding?.logoUrl?.trim() || null;
     const primary = branding?.primaryColor?.trim() || undefined;
     const name = getTenantName() || tenant.name || tenant.slug;
 
-    if (branded) {
+    if (hideDefaultLoor) {
       setRuntimeBrandName(name);
       setSuppressDefaultLogo(true);
     }
@@ -44,7 +44,7 @@ async function boot() {
       setRuntimeLogoUrl(logoUrl);
       preloadBrandImage(logoUrl);
       applyDocumentFavicon(logoUrl);
-    } else if (branded) {
+    } else if (hideDefaultLoor) {
       applyLetterFavicon(name, primary || "#7c3aed");
     }
 
