@@ -35,27 +35,29 @@ async function boot() {
     const primary = branding?.primaryColor?.trim() || undefined;
     const name = getTenantName() || tenant.name || tenant.slug;
 
+    // Only customer WLs replace LOOR chrome. Platform homolog keeps LOOR logo/title.
     if (hideDefaultLoor) {
       setRuntimeBrandName(name);
       setSuppressDefaultLogo(true);
-    }
-
-    if (logoUrl) {
-      setRuntimeLogoUrl(logoUrl);
-      preloadBrandImage(logoUrl);
-      applyDocumentFavicon(logoUrl);
-    } else if (hideDefaultLoor) {
-      applyLetterFavicon(name, primary || "#7c3aed");
-    }
-
-    applyThemeColor(undefined, primary);
-    if (name) {
+      if (logoUrl) {
+        setRuntimeLogoUrl(logoUrl);
+        preloadBrandImage(logoUrl);
+        applyDocumentFavicon(logoUrl);
+      } else {
+        applyLetterFavicon(name, primary || "#7c3aed");
+      }
       applyDocumentMetadata({
         title: `${name} — Empreendedor`,
         siteName: name,
         description: `Painel do empreendedor · ${name}`,
       });
+    } else if (logoUrl) {
+      setRuntimeLogoUrl(logoUrl);
+      preloadBrandImage(logoUrl);
+      applyDocumentFavicon(logoUrl);
     }
+
+    applyThemeColor(undefined, primary);
 
     const queryClient = new QueryClient({
       defaultOptions: {
