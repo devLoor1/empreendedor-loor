@@ -19,7 +19,6 @@ import ToolsKanbanPage from "@/pages/ferramentas-kanban";
 import ToolsPitchDeckPage from "@/pages/ferramentas-pitch-deck";
 import { ForumPage } from "@/pages/forum";
 import { InstallGuidePage } from "@/features/pwa/InstallGuidePage";
-import { InstallPromotionBanner } from "@/features/pwa/InstallPromotionBanner";
 import { PwaInstallProvider } from "@/features/pwa/PwaInstallProvider";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -34,7 +33,6 @@ function RootRedirect() {
 export default function App() {
   return (
     <PwaInstallProvider>
-      <InstallPromotionBanner />
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/app-android" element={<InstallGuidePage platform="android" />} />
