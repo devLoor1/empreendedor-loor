@@ -61,7 +61,8 @@ export function shouldHideDefaultLoorChrome(
   return isBrandedTenantSource(source) && !isPlatformLoorSlug(slug)
 }
 
-const BOOTSTRAP_CACHE_TTL_MS = 5 * 60 * 1000
+/** Short TTL so Studio logo/brand edits show up on reload within ~1 min. */
+const BOOTSTRAP_CACHE_TTL_MS = 45 * 1000
 const BOOTSTRAP_CACHE_PREFIX = "loor:entrepreneur-bootstrap:v1:"
 
 type CachedTenantPayload = {
@@ -71,11 +72,25 @@ type CachedTenantPayload = {
   tenant: TenantState
 }
 
+/**
+ * SA Studio iframe appends `saPreview`. Skip sessionStorage so remounts after
+ * logo remove/replace always hit fresh bootstrap.
+ */
+function shouldBypassBootstrapCache(): boolean {
+  if (typeof window === "undefined") return false
+  try {
+    return new URLSearchParams(window.location.search).has("saPreview")
+  } catch {
+    return false
+  }
+}
+
 function bootstrapCacheKey(host: string, pathSlug: string): string {
   return `${BOOTSTRAP_CACHE_PREFIX}${host.toLowerCase()}|${pathSlug.toLowerCase()}`
 }
 
 function readBootstrapCache(host: string, pathSlug: string): TenantState | null {
+  if (shouldBypassBootstrapCache()) return null
   if (typeof sessionStorage === "undefined") return null
   try {
     const raw = sessionStorage.getItem(bootstrapCacheKey(host, pathSlug))
@@ -98,6 +113,7 @@ function readBootstrapCache(host: string, pathSlug: string): TenantState | null 
 }
 
 function writeBootstrapCache(host: string, pathSlug: string, tenant: TenantState): void {
+  if (shouldBypassBootstrapCache()) return
   if (typeof sessionStorage === "undefined") return
   try {
     const payload: CachedTenantPayload = {
