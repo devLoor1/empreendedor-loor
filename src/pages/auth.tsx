@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useRef, useState } from "react";
 import { MailCheck, Sparkles, ShieldCheck, TrendingUp } from "lucide-react";
-import { getAppLogoUrl, getRuntimeBrandName, appLogoAlt } from "@/config/brand";
+import { getAppLogoUrl, getAppLogoOnDark, getRuntimeBrandName, appLogoAlt } from "@/config/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,7 +36,9 @@ export default function AuthPage() {
               height={56}
               decoding="async"
               fetchPriority="high"
-              className="h-14 w-auto max-w-[260px] object-contain rounded-md bg-white px-2 py-1.5"
+              className={getAppLogoOnDark()
+                ? "h-14 w-auto max-w-[260px] object-contain"
+                : "h-14 w-auto max-w-[260px] object-contain rounded-md bg-white px-2 py-1.5"}
             />
           ) : (
             <span className="text-2xl font-bold tracking-tight">
@@ -68,7 +70,9 @@ export default function AuthPage() {
                 height={40}
                 decoding="async"
                 fetchPriority="high"
-                className="h-10 w-auto max-w-[200px] object-contain rounded-md bg-white px-2 py-1"
+                className={getAppLogoOnDark()
+                  ? "h-10 w-auto max-w-[200px] object-contain"
+                  : "h-10 w-auto max-w-[200px] object-contain rounded-md bg-white px-2 py-1"}
               />
             ) : (
               <span className="font-bold tracking-tight">{getRuntimeBrandName() || "Plataforma"}</span>
