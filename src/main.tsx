@@ -12,6 +12,7 @@ import {
 } from "./config/tenant";
 import {
   setRuntimeBrandName,
+  setRuntimeLogoOnDark,
   setRuntimeLogoUrl,
   setSuppressDefaultLogo,
 } from "./config/brand";
@@ -34,6 +35,9 @@ async function boot() {
     const logoUrl = branding?.logoUrl?.trim() || null;
     const primary = branding?.primaryColor?.trim() || undefined;
     const name = getTenantName() || tenant.name || tenant.slug;
+    if (typeof branding?.logoOnDark === "boolean") {
+      setRuntimeLogoOnDark(branding.logoOnDark);
+    }
 
     // Only customer WLs replace LOOR chrome. Platform homolog keeps LOOR logo/title.
     if (hideDefaultLoor) {

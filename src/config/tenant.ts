@@ -11,6 +11,7 @@ export type PlatformBootstrap = {
     logoUrl: string | null
     primaryColor: string | null
     brandPanelTextColor: string | null
+    logoOnDark?: boolean
   }
   hero?: {
     enabled: boolean
@@ -193,6 +194,7 @@ function brandingFromPages(pages: Record<string, unknown> | undefined): Platform
           ? config.primaryColor
           : null,
     brandPanelTextColor: null,
+    logoOnDark: config?.logo_on_dark === true || config?.logoOnDark === true,
   }
 }
 
